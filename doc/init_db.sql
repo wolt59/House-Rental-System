@@ -318,6 +318,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- ============================================================
 INSERT INTO users (username, email, phone, full_name, hashed_password, role, is_active)
 VALUES ('admin', 'admin@house-rental.com', '13800000000', '系统管理员',
-        '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36Kz7aKdBdCkqy5uLbTLyGm',
+        '$2b$12$OTNhqDtytL9DXoBYHp2PK.zz4O9LgVjtW5JfS3YDNz.MyNUOi1LPK',
         'admin', 1)
 ON DUPLICATE KEY UPDATE username=username;

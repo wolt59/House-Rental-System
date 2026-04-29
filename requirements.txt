@@ -5,6 +5,7 @@ pydantic
 pydantic-settings
 python-dotenv
 passlib[bcrypt]
+bcrypt<4
 PyMySQL
 email-validator
 python-jose[cryptography]

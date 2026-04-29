@@ -40,10 +40,13 @@ const routes = [
         path: 'landlord',
         meta: { role: 'landlord' },
         children: [
+          { path: 'dashboard', name: 'LandlordDashboard', component: () => import('../views/landlord/Dashboard.vue') },
           { path: 'properties', name: 'LandlordProperties', component: () => import('../views/landlord/Properties.vue') },
           { path: 'bookings', name: 'LandlordBookings', component: () => import('../views/landlord/Bookings.vue') },
           { path: 'contracts', name: 'LandlordContracts', component: () => import('../views/landlord/Contracts.vue') },
           { path: 'payments', name: 'LandlordPayments', component: () => import('../views/landlord/Payments.vue') },
+          { path: 'maintenance', name: 'LandlordMaintenance', component: () => import('../views/landlord/Maintenance.vue') },
+          { path: 'complaints', name: 'LandlordComplaints', component: () => import('../views/landlord/Complaints.vue') },
           { path: 'news', name: 'LandlordNews', component: () => import('../views/landlord/News.vue') },
         ],
       },
@@ -54,7 +57,6 @@ const routes = [
           { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/admin/Dashboard.vue') },
           { path: 'users', name: 'AdminUsers', component: () => import('../views/admin/Users.vue') },
           { path: 'properties', name: 'AdminProperties', component: () => import('../views/admin/Properties.vue') },
-          { path: 'audit-logs', name: 'AdminAuditLogs', component: () => import('../views/admin/AuditLogs.vue') },
         ],
       },
     ],
@@ -67,8 +69,8 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('token')
-  const user = JSON.parse(localStorage.getItem('user') || 'null')
+  const token = sessionStorage.getItem('token')
+  const user = JSON.parse(sessionStorage.getItem('user') || 'null')
 
   if (to.meta.guest && token) {
     return next('/')
@@ -80,10 +82,17 @@ router.beforeEach((to, from, next) => {
     }
     return next('/login')
   }
+
   if (to.meta.role && user && user.role !== to.meta.role && user.role !== 'admin') {
     return next('/')
   }
+
+  if (user?.role === 'admin' && !to.path.startsWith('/admin')) {
+    return next('/admin/dashboard')
+  }
+
   next()
 })
+
 
 export default router

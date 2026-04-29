@@ -162,11 +162,24 @@ function openDialog(row) {
 async function handleSubmit() {
   submitting.value = true
   try {
-    const data = { ...form }
-    if (data.area) data.area = parseFloat(data.area)
-    if (data.rent) data.rent = parseFloat(data.rent)
-    if (data.deposit) data.deposit = parseFloat(data.deposit)
-    if (data.total_floors) data.total_floors = parseInt(data.total_floors)
+    // 后端 Pydantic 对数字字段不接受 ''，需要在提交前清理空字符串
+    // 这样即使可选字段没填，也能避免 422。
+    if (!form.title?.trim() || !form.address?.trim() || form.rent === '') {
+      ElMessage.warning('请填写：标题、地址、月租金')
+      return
+    }
+
+    const data = {}
+    Object.entries(form).forEach(([k, v]) => {
+      if (v === '' || v === null || v === undefined) return
+      data[k] = v
+    })
+
+    // 数字字段做类型转换（保留 0 值的场景）
+    if ('area' in data) data.area = parseFloat(data.area)
+    if ('rent' in data) data.rent = parseFloat(data.rent)
+    if ('deposit' in data) data.deposit = parseFloat(data.deposit)
+    if ('total_floors' in data) data.total_floors = parseInt(data.total_floors)
     if (editingId.value) {
       await updateProperty(editingId.value, data)
       ElMessage.success('更新成功')
@@ -217,13 +230,53 @@ async function setCover(img) {
   } catch (e) {}
 }
 
-async function handleDeleteImage(img) {
+async function handleDelete(row) {
   try {
-    await ElMessageBox.confirm('确定删除此图片？', '提示', { type: 'warning' })
-    await deletePropertyImage(img.id)
+    // 第一步：检查是否有合同
+    const hasContract = row.contracts && row.contracts.some(c =>
+      c.status === 'active' || c.status === 'pending_sign'
+    )
+
+    if (hasContract) {
+      ElMessage.error('该房源有生效或待签署的合同，无法删除。请先终止相关合同。')
+      return
+    }
+
+    // 第二步：检查是否有待处理事项
+    const warnings = []
+    if (row.bookings && row.bookings.some(b => b.status === 'pending')) {
+      warnings.push('有待处理的预约')
+    }
+    if (row.maintenance_requests && row.maintenance_requests.some(m => m.status === 'open')) {
+      warnings.push('有待处理的维修申请')
+    }
+    if (row.complaints && row.complaints.some(c => c.status === 'open')) {
+      warnings.push('有待处理的投诉')
+    }
+
+    // 第三步：构建确认消息
+    let confirmMessage = '确定删除该房源？此操作不可恢复'
+    if (warnings.length > 0) {
+      confirmMessage += '\n\n⚠️ 警告：' + warnings.join('、')
+      confirmMessage += '\n\n删除后将同时清除这些待处理事项。'
+    }
+
+    await ElMessageBox.confirm(confirmMessage, '确认删除', {
+      type: 'warning',
+      distinguishCancelAndClose: true,
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消'
+    })
+
+    await deleteProperty(row.id)
     ElMessage.success('已删除')
-    manageImages({ id: currentPropertyId.value })
-  } catch (e) {}
+    loadData()
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') {
+      const errorMsg = e.response?.data?.detail || e.message || '删除失败'
+      ElMessage.error(errorMsg)
+    }
+  }
 }
 
 onMounted(loadData)

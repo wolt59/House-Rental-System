@@ -1,4 +1,6 @@
 from typing import List
+
+import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -95,6 +97,11 @@ def sign_contract_landlord(contract_id: int, request: Request, db: Session = Dep
     contract.signed_by_landlord = 1
     if contract.signed_by_tenant:
         contract.status = "active"
+        contract.landlord_signed_at = datetime.utcnow()
+        # 合同生效，更新房源状态为已出租
+        property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
+        if property_obj:
+            property_obj.status = "rented"
     else:
         contract.status = "pending_tenant_sign"
     db.commit()
@@ -112,33 +119,40 @@ def sign_contract_landlord(contract_id: int, request: Request, db: Session = Dep
     return contract
 
 
-@router.put("/{contract_id}/sign/tenant", response_model=ContractSchema)
-def sign_contract_tenant(contract_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+
+@router.put("/{contract_id}/sign/landlord", response_model=ContractSchema)
+def sign_contract_landlord(contract_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
     contract = crud_contract.get_contract(db, contract_id)
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-    if contract.tenant_id != current_user.id:
+    if contract.landlord_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    if contract.signed_by_tenant:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already signed by tenant")
-    contract.signed_by_tenant = 1
     if contract.signed_by_landlord:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already signed by landlord")
+    contract.signed_by_landlord = 1
+    if contract.signed_by_tenant:
         contract.status = "active"
+        contract.landlord_signed_at = datetime.utcnow()
+        # 合同生效，更新房源状态为已出租
+        property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
+        if property_obj:
+            property_obj.status = "rented"
     else:
-        contract.status = "pending_landlord_sign"
+        contract.status = "pending_tenant_sign"
     db.commit()
     db.refresh(contract)
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
-        action="sign_contract_tenant",
+        action="sign_contract_landlord",
         target_type="contract",
         target_id=contract.id,
-        detail="Contract signed by tenant",
+        detail="Contract signed by landlord",
         ip_address=ip_address,
     )
     return contract
+
 
 
 @router.put("/{contract_id}/terminate", response_model=ContractSchema)
@@ -151,6 +165,11 @@ def terminate_contract(contract_id: int, request: Request, db: Session = Depends
     if contract.status != "active":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only active contracts can be terminated")
     contract.status = "terminated"
+    contract.terminated_at = datetime.utcnow()
+    # 合同终止，恢复房源状态为 vacant（空置）
+    property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
+    if property_obj:
+        property_obj.status = "vacant"
     db.commit()
     db.refresh(contract)
     ip_address = request.client.host if request.client else None
@@ -164,3 +183,4 @@ def terminate_contract(contract_id: int, request: Request, db: Session = Depends
         ip_address=ip_address,
     )
     return contract
+

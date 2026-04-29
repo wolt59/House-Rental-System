@@ -4,8 +4,8 @@ import { login as loginApi, register as registerApi } from '../api/auth'
 import { getMe } from '../api/user'
 
 export const useUserStore = defineStore('user', () => {
-  const token = ref(localStorage.getItem('token') || '')
-  const user = ref(JSON.parse(localStorage.getItem('user') || 'null'))
+  const token = ref(sessionStorage.getItem('token') || '')
+  const user = ref(JSON.parse(sessionStorage.getItem('user') || 'null'))
 
   const isLoggedIn = computed(() => !!token.value)
   const userRole = computed(() => user.value?.role || '')
@@ -16,7 +16,10 @@ export const useUserStore = defineStore('user', () => {
   async function login(username, password) {
     const res = await loginApi(username, password)
     token.value = res.access_token
-    localStorage.setItem('token', res.access_token)
+    sessionStorage.setItem('token', res.access_token)
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+
     await fetchUser()
   }
 
@@ -25,16 +28,21 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function fetchUser() {
-    const res = await getMe()
-    user.value = res
-    localStorage.setItem('user', JSON.stringify(res))
+    try {
+      const res = await getMe()
+      user.value = res
+      sessionStorage.setItem('user', JSON.stringify(res))
+    } catch (error) {
+      console.error('获取用户信息失败:', error)
+      throw error
+    }
   }
 
   function logout() {
     token.value = ''
     user.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('user')
   }
 
   return { token, user, isLoggedIn, userRole, isAdmin, isLandlord, isTenant, login, register, fetchUser, logout }

@@ -29,70 +29,78 @@
     <el-container>
       <el-aside width="220px" class="aside" v-if="userStore.isLoggedIn">
         <el-menu :default-active="$route.path" router class="aside-menu">
-          <el-menu-item index="/">
-            <el-icon><HomeFilled /></el-icon>
-            <span>首页</span>
-          </el-menu-item>
-          <el-menu-item index="/properties">
-            <el-icon><OfficeBuilding /></el-icon>
-            <span>房源列表</span>
-          </el-menu-item>
-          <el-menu-item index="/search">
-            <el-icon><Search /></el-icon>
-            <span>智能搜索</span>
-          </el-menu-item>
-          <el-menu-item index="/news">
-            <el-icon><Document /></el-icon>
-            <span>新闻资讯</span>
-          </el-menu-item>
-          <el-menu-item index="/messages">
-            <el-icon><ChatDotRound /></el-icon>
-            <span>消息中心</span>
-          </el-menu-item>
 
-          <el-divider v-if="userStore.isTenant || userStore.isAdmin" />
-
-          <template v-if="userStore.isTenant || userStore.isAdmin">
-            <el-sub-menu index="tenant-menu">
-              <template #title>
-                <el-icon><User /></el-icon>
-                <span>租客功能</span>
-              </template>
-              <el-menu-item index="/tenant/bookings">预约看房</el-menu-item>
-              <el-menu-item index="/tenant/contracts">我的合同</el-menu-item>
-              <el-menu-item index="/tenant/payments">租金支付</el-menu-item>
-              <el-menu-item index="/tenant/maintenance">维修申请</el-menu-item>
-              <el-menu-item index="/tenant/complaints">投诉管理</el-menu-item>
-            </el-sub-menu>
-          </template>
-
-          <template v-if="userStore.isLandlord || userStore.isAdmin">
-            <el-sub-menu index="landlord-menu">
-              <template #title>
-                <el-icon><House /></el-icon>
-                <span>房东功能</span>
-              </template>
-              <el-menu-item index="/landlord/properties">房源管理</el-menu-item>
-              <el-menu-item index="/landlord/bookings">预约管理</el-menu-item>
-              <el-menu-item index="/landlord/contracts">合同管理</el-menu-item>
-              <el-menu-item index="/landlord/payments">收款管理</el-menu-item>
-              <el-menu-item index="/landlord/news">新闻管理</el-menu-item>
-            </el-sub-menu>
-          </template>
-
+          <!-- 管理员只显示系统管理 -->
           <template v-if="userStore.isAdmin">
-            <el-divider />
             <el-sub-menu index="admin-menu">
               <template #title>
                 <el-icon><Setting /></el-icon>
                 <span>系统管理</span>
               </template>
-              <el-menu-item index="/admin/dashboard">数据统计</el-menu-item>
+              <el-menu-item index="/admin/dashboard">数据面板</el-menu-item>
               <el-menu-item index="/admin/users">用户管理</el-menu-item>
-              <el-menu-item index="/admin/properties">房源审核</el-menu-item>
-              <el-menu-item index="/admin/audit-logs">审计日志</el-menu-item>
+              <el-menu-item index="/admin/properties">房源管理</el-menu-item>
             </el-sub-menu>
           </template>
+
+          <!-- 普通用户（租客/房东）显示完整菜单 -->
+          <template v-else>
+            <el-menu-item index="/">
+              <el-icon><HomeFilled /></el-icon>
+              <span>首页</span>
+            </el-menu-item>
+            <el-menu-item index="/properties">
+              <el-icon><OfficeBuilding /></el-icon>
+              <span>房源列表</span>
+            </el-menu-item>
+            <el-menu-item index="/search">
+              <el-icon><Search /></el-icon>
+              <span>智能搜索</span>
+            </el-menu-item>
+            <el-menu-item index="/news">
+              <el-icon><Document /></el-icon>
+              <span>新闻资讯</span>
+            </el-menu-item>
+            <el-menu-item index="/messages">
+              <el-icon><ChatDotRound /></el-icon>
+              <span>消息中心</span>
+            </el-menu-item>
+
+            <el-divider v-if="userStore.isTenant" />
+
+            <template v-if="userStore.isTenant">
+              <el-sub-menu index="tenant-menu">
+                <template #title>
+                  <el-icon><User /></el-icon>
+                  <span>租客功能</span>
+                </template>
+                <el-menu-item index="/tenant/bookings">预约看房</el-menu-item>
+                <el-menu-item index="/tenant/contracts">我的合同</el-menu-item>
+                <el-menu-item index="/tenant/payments">租金支付</el-menu-item>
+                <el-menu-item index="/tenant/maintenance">维修申请</el-menu-item>
+                <el-menu-item index="/tenant/complaints">投诉提交</el-menu-item>
+              </el-sub-menu>
+            </template>
+
+            <template v-if="userStore.isLandlord">
+              <el-divider />
+              <el-sub-menu index="landlord-menu">
+                <template #title>
+                  <el-icon><House /></el-icon>
+                  <span>房东功能</span>
+                </template>
+                <el-menu-item index="/landlord/dashboard">数据面板</el-menu-item>
+                <el-menu-item index="/landlord/properties">房源管理</el-menu-item>
+                <el-menu-item index="/landlord/bookings">预约管理</el-menu-item>
+                <el-menu-item index="/landlord/contracts">合同管理</el-menu-item>
+                <el-menu-item index="/landlord/payments">收款管理</el-menu-item>
+                <el-menu-item index="/landlord/maintenance">维修管理</el-menu-item>
+                <el-menu-item index="/landlord/complaints">投诉管理</el-menu-item>
+                <el-menu-item index="/landlord/news">新闻管理</el-menu-item>
+              </el-sub-menu>
+            </template>
+          </template>
+
         </el-menu>
       </el-aside>
       <el-main class="main-content">
