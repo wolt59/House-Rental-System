@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class BookingBase(BaseModel):
     property_id: int
@@ -14,7 +16,7 @@ class BookingCreate(BookingBase):
     pass
 
 
-class BookingInDBBase(BookingBase):
+class BookingInDBBase(BookingBase, UTCDatetimeModel):
     id: int
     tenant_id: int
     status: str

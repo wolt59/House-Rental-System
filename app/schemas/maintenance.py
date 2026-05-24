@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class MaintenanceBase(BaseModel):
     property_id: int
@@ -15,7 +17,7 @@ class MaintenanceCreate(MaintenanceBase):
     priority: Optional[str] = "normal"
 
 
-class Maintenance(MaintenanceBase):
+class Maintenance(MaintenanceBase, UTCDatetimeModel):
     id: int
     tenant_id: int
     title: Optional[str] = None

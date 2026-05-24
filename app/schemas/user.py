@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, constr
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class UserBase(BaseModel):
     username: constr(min_length=3, max_length=80)
@@ -29,7 +31,7 @@ class PasswordChange(BaseModel):
     new_password: constr(min_length=8)
 
 
-class UserInDBBase(UserBase):
+class UserInDBBase(UserBase, UTCDatetimeModel):
     id: int
     avatar_url: Optional[str] = None
     is_active: bool

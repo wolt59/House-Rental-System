@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class ComplaintBase(BaseModel):
     property_id: int
@@ -14,7 +16,7 @@ class ComplaintCreate(ComplaintBase):
     image_urls: Optional[str] = None
 
 
-class Complaint(ComplaintBase):
+class Complaint(ComplaintBase, UTCDatetimeModel):
     id: int
     tenant_id: int
     complaint_type: Optional[str] = None

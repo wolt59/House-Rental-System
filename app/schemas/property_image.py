@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class PropertyImageCreate(BaseModel):
     image_url: str
@@ -17,7 +19,7 @@ class PropertyImageUpdate(BaseModel):
     sort_order: Optional[int] = None
 
 
-class PropertyImage(BaseModel):
+class PropertyImage(UTCDatetimeModel):
     id: int
     property_id: int
     image_url: str

@@ -3,8 +3,10 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.schemas.common import UTCDatetimeModel
 
-class AuditLog(BaseModel):
+
+class AuditLog(UTCDatetimeModel):
     id: int
     user_id: Optional[int] = None
     action: str

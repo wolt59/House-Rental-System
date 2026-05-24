@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class ContractCreate(BaseModel):
     property_id: int
@@ -37,7 +39,7 @@ class ContractUpdate(BaseModel):
     remark: Optional[str] = None
 
 
-class Contract(BaseModel):
+class Contract(UTCDatetimeModel):
     id: int
     contract_no: Optional[str] = None
     property_id: int

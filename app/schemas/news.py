@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class NewsBase(BaseModel):
     title: str
@@ -23,7 +25,7 @@ class NewsUpdate(BaseModel):
     status: Optional[str] = None
 
 
-class News(NewsBase):
+class News(NewsBase, UTCDatetimeModel):
     id: int
     author_id: int
     category: Optional[str] = None

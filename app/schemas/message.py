@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class MessageBase(BaseModel):
     to_user_id: int
@@ -14,7 +16,7 @@ class MessageCreate(MessageBase):
     message_type: Optional[str] = "text"
 
 
-class Message(MessageBase):
+class Message(MessageBase, UTCDatetimeModel):
     id: int
     from_user_id: int
     message_type: str
