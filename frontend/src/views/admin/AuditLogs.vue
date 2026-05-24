@@ -19,7 +19,7 @@
     <el-table :data="logs" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column label="操作用户" width="100">
-        <template #default="{ row }">{{ row.user_id ? '用户#' + row.user_id : '系统' }}</template>
+        <template #default="{ row }">{{ row.user_id ? (userNames[row.user_id] || '加载中...') : '系统' }}</template>
       </el-table-column>
       <el-table-column prop="action" label="操作" width="160" />
       <el-table-column prop="target_type" label="对象类型" width="120" />
@@ -32,16 +32,27 @@
         <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!loading && logs.length === 0" description="暂无数据" />
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { getAuditLogs } from '../../api/stats'
+import { ElMessage } from 'element-plus'
+import { useNameResolver } from '../../composables/useNameResolver'
 
 const logs = ref([])
 const loading = ref(false)
+const total = ref(0)
+const pageSize = ref(10)
+const currentPage = ref(1)
 const filters = reactive({ action: '', target_type: '', ip_address: '' })
+const { resolveItems, userNames } = useNameResolver()
 
 function formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : '' }
 
@@ -55,16 +66,22 @@ function resetFilters() {
 async function loadData() {
   loading.value = true
   try {
-    const params = { limit: 50 }
+    const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
     if (filters.action) params.action = filters.action
     if (filters.target_type) params.target_type = filters.target_type
     if (filters.ip_address) params.ip_address = filters.ip_address
     const res = await getAuditLogs(params)
     logs.value = Array.isArray(res) ? res : []
-  } catch (e) {} finally {
+    if (logs.value.length) await resolveItems(logs.value, ['user_id'])
+    total.value = Array.isArray(res) ? res.length : 0
+  } catch (e) { ElMessage.error('加载审计日志失败') } finally {
     loading.value = false
   }
 }
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+</style>

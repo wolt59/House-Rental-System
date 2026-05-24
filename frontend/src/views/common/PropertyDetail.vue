@@ -60,9 +60,9 @@
     </el-row>
 
     <el-dialog v-model="showBookingDialog" title="预约看房" width="480px">
-      <el-form :model="bookingForm" label-width="80px">
-        <el-form-item label="预约时间">
-          <el-date-picker v-model="bookingForm.appointment_time" type="datetime" placeholder="选择时间" style="width: 100%" />
+      <el-form ref="bookingFormRef" :model="bookingForm" label-width="80px" :rules="bookingRules">
+        <el-form-item label="预约时间" prop="appointment_time">
+          <el-date-picker v-model="bookingForm.appointment_time" type="datetime" placeholder="选择时间" style="width: 100%" :disabled-date="d => d.getTime() < Date.now() - 86400000" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="bookingForm.note" type="textarea" :rows="3" />
@@ -109,6 +109,11 @@ const msgLoading = ref(false)
 
 const bookingForm = ref({ appointment_time: '', note: '' })
 const messageForm = ref({ content: '' })
+const bookingFormRef = ref(null)
+
+const bookingRules = {
+  appointment_time: [{ required: true, message: '请选择预约时间', trigger: 'change' }],
+}
 
 const statusType = computed(() => {
   const map = { vacant: 'success', rented: 'warning', maintenance: 'danger' }
@@ -130,16 +135,16 @@ async function loadData() {
     } else {
       currentImage.value = 'https://via.placeholder.com/600x400?text=No+Image'
     }
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('加载房源详情失败')
+  } finally {
     loading.value = false
   }
 }
 
 async function handleBooking() {
-  if (!bookingForm.value.appointment_time) {
-    ElMessage.warning('请选择预约时间')
-    return
-  }
+  const valid = await bookingFormRef.value.validate().catch(() => false)
+  if (!valid) return
   bookingLoading.value = true
   try {
     await createBooking({
@@ -150,7 +155,9 @@ async function handleBooking() {
     ElMessage.success('预约成功')
     showBookingDialog.value = false
     bookingForm.value = { appointment_time: '', note: '' }
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('预约失败')
+  } finally {
     bookingLoading.value = false
   }
 }
@@ -170,7 +177,9 @@ async function handleSendMessage() {
     ElMessage.success('消息已发送')
     showMessageDialog.value = false
     messageForm.value = { content: '' }
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('发送消息失败')
+  } finally {
     msgLoading.value = false
   }
 }

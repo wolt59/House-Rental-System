@@ -24,9 +24,14 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!loading && newsList.length === 0" description="暂无数据" />
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
+    </div>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑新闻' : '发布新闻'" width="600px">
-      <el-form :model="form" label-width="80px">
+      <el-form ref="formRef" :model="form" label-width="80px" :rules="newsRules">
         <el-form-item label="标题"><el-input v-model="form.title" /></el-form-item>
         <el-form-item label="分类">
           <el-select v-model="form.category">
@@ -58,18 +63,29 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const newsList = ref([])
 const loading = ref(false)
+const total = ref(0)
+const pageSize = ref(10)
+const currentPage = ref(1)
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const editingId = ref(null)
+const formRef = ref(null)
+
+const newsRules = {
+  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+  category: [{ required: true, message: '请选择分类', trigger: 'change' }],
+  content: [{ required: true, message: '请输入内容', trigger: 'blur' }],
+}
 const defaultForm = { title: '', category: '', content: '', status: 'draft' }
 const form = reactive({ ...defaultForm })
 
 async function loadData() {
   loading.value = true
   try {
-    const res = await getMyNews({ limit: 50 })
+    const res = await getMyNews({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
     newsList.value = Array.isArray(res) ? res : []
-  } catch (e) {} finally {
+    total.value = Array.isArray(res) ? res.length : 0
+  } catch (e) { ElMessage.error('加载新闻列表失败') } finally {
     loading.value = false
   }
 }
@@ -86,6 +102,8 @@ function openDialog(row) {
 }
 
 async function handleSubmit() {
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
   submitting.value = true
   try {
     if (editingId.value) {
@@ -97,7 +115,7 @@ async function handleSubmit() {
     }
     dialogVisible.value = false
     loadData()
-  } catch (e) {} finally {
+  } catch (e) { ElMessage.error(editingId.value ? '更新新闻失败' : '发布新闻失败') } finally {
     submitting.value = false
   }
 }
@@ -107,17 +125,27 @@ async function handlePublish(row) {
     await updateNews(row.id, { status: 'published' })
     ElMessage.success('已发布')
     loadData()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('发布失败') }
 }
 
 async function handleDelete(row) {
   try {
     await ElMessageBox.confirm('确定删除此新闻？', '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
     await deleteNews(row.id)
     ElMessage.success('已删除')
     loadData()
-  } catch (e) {}
+  } catch (e) {
+    ElMessage.error('删除失败')
+  }
 }
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+</style>

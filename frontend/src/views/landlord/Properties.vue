@@ -29,6 +29,7 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!loading && properties.length === 0" description="暂无房源，点击右上角发布" />
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑房源' : '发布房源'" width="700px">
       <el-form :model="form" label-width="90px">
@@ -143,7 +144,9 @@ async function loadData() {
   try {
     const res = await getMyProperties({ limit: 50 })
     properties.value = Array.isArray(res) ? res : []
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('加载房源列表失败')
+  } finally {
     loading.value = false
   }
 }
@@ -189,18 +192,11 @@ async function handleSubmit() {
     }
     dialogVisible.value = false
     loadData()
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('提交失败')
+  } finally {
     submitting.value = false
   }
-}
-
-async function handleDelete(row) {
-  try {
-    await ElMessageBox.confirm('确定删除此房源？', '提示', { type: 'warning' })
-    await deleteProperty(row.id)
-    ElMessage.success('已删除')
-    loadData()
-  } catch (e) {}
 }
 
 async function manageImages(row) {
@@ -208,7 +204,9 @@ async function manageImages(row) {
   try {
     const res = await getPropertyImages(row.id)
     images.value = Array.isArray(res) ? res : []
-  } catch (e) {}
+  } catch (e) {
+    ElMessage.error('图片管理加载失败')
+  }
   imageDialogVisible.value = true
 }
 
@@ -218,7 +216,9 @@ async function handleImageUpload(file) {
     await addPropertyImage(currentPropertyId.value, { image_url: res.url, image_type: 'photo', is_cover: images.value.length === 0 ? 1 : 0, sort_order: images.value.length })
     ElMessage.success('上传成功')
     manageImages({ id: currentPropertyId.value })
-  } catch (e) {}
+  } catch (e) {
+    ElMessage.error('图片上传失败')
+  }
   return false
 }
 
@@ -227,54 +227,24 @@ async function setCover(img) {
     await updatePropertyImage(img.id, { is_cover: 1 })
     ElMessage.success('已设为封面')
     manageImages({ id: currentPropertyId.value })
-  } catch (e) {}
+  } catch (e) {
+    ElMessage.error('设置封面失败')
+  }
 }
 
 async function handleDelete(row) {
   try {
-    // 第一步：检查是否有合同
-    const hasContract = row.contracts && row.contracts.some(c =>
-      c.status === 'active' || c.status === 'pending_sign'
-    )
-
-    if (hasContract) {
-      ElMessage.error('该房源有生效或待签署的合同，无法删除。请先终止相关合同。')
-      return
-    }
-
-    // 第二步：检查是否有待处理事项
-    const warnings = []
-    if (row.bookings && row.bookings.some(b => b.status === 'pending')) {
-      warnings.push('有待处理的预约')
-    }
-    if (row.maintenance_requests && row.maintenance_requests.some(m => m.status === 'open')) {
-      warnings.push('有待处理的维修申请')
-    }
-    if (row.complaints && row.complaints.some(c => c.status === 'open')) {
-      warnings.push('有待处理的投诉')
-    }
-
-    // 第三步：构建确认消息
-    let confirmMessage = '确定删除该房源？此操作不可恢复'
-    if (warnings.length > 0) {
-      confirmMessage += '\n\n⚠️ 警告：' + warnings.join('、')
-      confirmMessage += '\n\n删除后将同时清除这些待处理事项。'
-    }
-
-    await ElMessageBox.confirm(confirmMessage, '确认删除', {
+    await ElMessageBox.confirm('确定删除该房源？此操作不可恢复。\n若有生效合同，系统将阻止删除。', '确认删除', {
       type: 'warning',
-      distinguishCancelAndClose: true,
       confirmButtonText: '确认删除',
       cancelButtonText: '取消'
     })
-
     await deleteProperty(row.id)
     ElMessage.success('已删除')
     loadData()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') {
-      const errorMsg = e.response?.data?.detail || e.message || '删除失败'
-      ElMessage.error(errorMsg)
+      ElMessage.error(e.response?.data?.detail || '删除失败')
     }
   }
 }

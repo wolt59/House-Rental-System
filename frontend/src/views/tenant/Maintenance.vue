@@ -25,11 +25,18 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!loading && list.length === 0" description="暂无数据" />
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
+    </div>
 
     <el-dialog v-model="showDialog" title="提交维修申请" width="500px">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="房源ID">
-          <el-input v-model.number="form.property_id" />
+        <el-form-item label="房源">
+          <el-select v-model="form.property_id" placeholder="请选择房源" filterable style="width: 100%">
+            <el-option v-for="p in myProperties" :key="p.id" :label="p.title" :value="p.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="标题">
           <el-input v-model="form.title" />
@@ -66,22 +73,27 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { getMaintenances, createMaintenance } from '../../api/maintenance'
+import { getProperties } from '../../api/property'
 import { ElMessage } from 'element-plus'
 
 const list = ref([])
 const loading = ref(false)
+const total = ref(0)
+const pageSize = ref(10)
+const currentPage = ref(1)
 const showDialog = ref(false)
 const detailVisible = ref(false)
 const submitting = ref(false)
 const currentItem = ref(null)
+const myProperties = ref([])
 const form = reactive({ property_id: '', title: '', description: '', priority: 'normal' })
 
 const priorityMap = { low: '低', normal: '普通', high: '高', urgent: '紧急' }
-const priorityTypeMap = { low: 'info', normal: '', high: 'warning', urgent: 'danger' }
+const priorityTypeMap = { low: 'info', normal: 'info', high: 'warning', urgent: 'danger' }
 const statusMap = { new: '新建', in_progress: '处理中', resolved: '已解决', closed: '已关闭' }
-const statusTypeMap = { new: 'info', in_progress: 'warning', resolved: 'success', closed: '' }
+const statusTypeMap = { new: 'info', in_progress: 'warning', resolved: 'success', closed: 'info' }
 function priorityLabel(p) { return priorityMap[p] || p }
 function priorityType(p) { return priorityTypeMap[p] || 'info' }
 function statusLabel(s) { return statusMap[s] || s }
@@ -90,16 +102,28 @@ function statusType(s) { return statusTypeMap[s] || 'info' }
 async function loadData() {
   loading.value = true
   try {
-    const res = await getMaintenances({ limit: 50 })
+    const res = await getMaintenances({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
     list.value = Array.isArray(res) ? res : []
-  } catch (e) {} finally {
+    total.value = Array.isArray(res) ? res.length : 0
+  } catch (e) {
+    ElMessage.error('加载维修记录失败')
+  } finally {
     loading.value = false
+  }
+}
+
+async function loadMyProperties() {
+  try {
+    const res = await getProperties({ limit: 100 })
+    myProperties.value = Array.isArray(res) ? res : []
+  } catch (e) {
+    ElMessage.error('加载房源列表失败')
   }
 }
 
 async function handleSubmit() {
   if (!form.property_id || !form.description) {
-    ElMessage.warning('请填写房源ID和描述')
+    ElMessage.warning('请选择房源并填写描述')
     return
   }
   submitting.value = true
@@ -112,7 +136,9 @@ async function handleSubmit() {
     form.description = ''
     form.priority = 'normal'
     loadData()
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('提交维修申请失败')
+  } finally {
     submitting.value = false
   }
 }
@@ -123,4 +149,12 @@ function viewDetail(row) {
 }
 
 onMounted(loadData)
+
+watch(showDialog, (val) => {
+  if (val) loadMyProperties()
+})
 </script>
+
+<style scoped>
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+</style>

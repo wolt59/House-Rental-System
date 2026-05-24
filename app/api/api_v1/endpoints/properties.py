@@ -31,25 +31,15 @@ def list_properties(
     region: Optional[str] = None,
     floor_plan: Optional[str] = None,
     status: Optional[str] = None,
-    review_status: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user_optional),
 ):
-    is_admin = current_user and current_user.role == "admin"
-    if is_admin:
-        effective_review_status = review_status
-    else:
-        if review_status and review_status != "approved":
-            effective_review_status = "approved"
-        else:
-            effective_review_status = review_status if review_status else "approved"
     return crud_property.get_properties(
         db,
         skip=skip,
         limit=limit,
         region=region,
         floor_plan=floor_plan,
-        review_status=effective_review_status,
+        review_status="approved",
         status=status,
     )
 
@@ -120,9 +110,6 @@ def read_property(property_id: int, db: Session = Depends(get_db), current_user=
         and (not current_user or current_user.role != "admin")
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
-    db_property.view_count = (db_property.view_count or 0) + 1
-    db.commit()
-    db.refresh(db_property)
     return db_property
 
 
@@ -235,98 +222,21 @@ def change_property_status(
 
 
 @router.delete("/{property_id}", response_model=Property)
-def delete_property(
-        property_id: int,
-        request: Request,
-        db: Session = Depends(get_db),
-        current_user=Depends(get_current_active_user)
-):
-    from app.models.contract import Contract as ContractModel
-    from app.models.booking import Booking as BookingModel
-
+def delete_property(property_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
     db_property = crud_property.get_property(db, property_id=property_id)
     if not db_property:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
     if db_property.owner_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-    # 检查是否有生效的合同
-    active_contracts = db.query(ContractModel).filter(
-        ContractModel.property_id == property_id,
-        ContractModel.status.in_(["active", "pending_sign"])
-    ).count()
-
-    if active_contracts > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"该房源有 {active_contracts} 个生效或待签署的合同，无法删除。请先终止相关合同。"
-        )
-
-    # 检查是否有待处理的预约
-    pending_bookings = db.query(BookingModel).filter(
-        BookingModel.property_id == property_id,
-        BookingModel.status == "pending"
-    ).count()
-
-    # 检查是否有待处理的维修申请
-    open_maintenances = db.query(db_property.maintenance_requests).filter(
-        db_property.maintenance_requests.any(status="open")
-    ).count()
-
-    # 检查是否有待处理的投诉
-    open_complaints = db.query(db_property.complaints).filter(
-        db_property.complaints.any(status="open")
-    ).count()
-
-    # 如果有待处理事项，返回警告信息（前端提示用户）
-    warnings = []
-    if pending_bookings > 0:
-        warnings.append(f"{pending_bookings} 个待处理预约")
-    if open_maintenances > 0:
-        warnings.append(f"{open_maintenances} 个待处理维修申请")
-    if open_complaints > 0:
-        warnings.append(f"{open_complaints} 个待处理投诉")
-
-    # 删除关联的图片
-    for image in db_property.images:
-        db.delete(image)
-
-    # 删除关联的消息
-    for message in db_property.messages:
-        db.delete(message)
-
-    # 删除关联的预约
-    for booking in db_property.bookings:
-        db.delete(booking)
-
-    # 删除关联的维修申请
-    for maintenance in db_property.maintenance_requests:
-        db.delete(maintenance)
-
-    # 删除关联的投诉
-    for complaint in db_property.complaints:
-        db.delete(complaint)
-
-    # 删除关联的合同（已终止的合同）
-    for contract in db_property.contracts:
-        db.delete(contract)
-
-    db.commit()
-
     removed = crud_property.remove_property(db, db_property)
     ip_address = request.client.host if request.client else None
-
-    warning_msg = f"注意：同时删除了 {', '.join(warnings)}。" if warnings else ""
-
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
         action="delete_property",
         target_type="property",
         target_id=removed.id,
-        detail=f"Property deleted. {warning_msg}",
+        detail="Property deleted",
         ip_address=ip_address,
     )
     return removed
-
-

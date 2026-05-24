@@ -57,10 +57,12 @@ const routes = [
           { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/admin/Dashboard.vue') },
           { path: 'users', name: 'AdminUsers', component: () => import('../views/admin/Users.vue') },
           { path: 'properties', name: 'AdminProperties', component: () => import('../views/admin/Properties.vue') },
+          { path: 'audit-logs', name: 'AdminAuditLogs', component: () => import('../views/admin/AuditLogs.vue') },
         ],
       },
     ],
   },
+  { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 
 const router = createRouter({
@@ -87,7 +89,7 @@ router.beforeEach((to, from, next) => {
     return next('/')
   }
 
-  if (user?.role === 'admin' && !to.path.startsWith('/admin')) {
+  if (user?.role === 'admin' && (to.path.startsWith('/tenant/') || to.path.startsWith('/landlord/'))) {
     return next('/admin/dashboard')
   }
 

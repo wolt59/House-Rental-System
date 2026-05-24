@@ -8,7 +8,7 @@ from app.api.deps import get_current_active_user, get_current_active_admin, get_
 from app.crud import crud_audit, crud_contract
 from app.models.contract import Contract
 from app.models.property import Property
-from app.schemas.contract import Contract as ContractSchema, ContractCreate, ContractUpdate
+from app.schemas.contract import Contract as ContractSchema, ContractCreate, ContractAutoCreate, ContractUpdate
 
 router = APIRouter()
 
@@ -22,6 +22,15 @@ def create_contract(contract_in: ContractCreate, request: Request, db: Session =
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to create contract for this property")
     if property_obj.review_status != "approved":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Property must be approved before creating contract")
+    existing_active = db.query(Contract).filter(
+        Contract.property_id == contract_in.property_id,
+        Contract.status.in_(["pending_sign", "pending_landlord_sign", "pending_tenant_sign", "active"])
+    ).first()
+    if existing_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Property already has an active or pending contract"
+        )
     contract = crud_contract.create_contract(db, landlord_id=current_user.id, contract_in=contract_in)
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
@@ -31,6 +40,52 @@ def create_contract(contract_in: ContractCreate, request: Request, db: Session =
         target_type="contract",
         target_id=contract.id,
         detail=f"Contract created for property {contract.property_id}",
+        ip_address=ip_address,
+    )
+    return contract
+
+
+@router.post("/auto-create", response_model=ContractSchema, status_code=status.HTTP_201_CREATED)
+def auto_create_contract(contract_in: ContractAutoCreate, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+    if current_user.role != "tenant":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only tenants can auto-create contracts")
+    property_obj = db.query(Property).filter(Property.id == contract_in.property_id).first()
+    if not property_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+    if property_obj.owner_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot rent your own property")
+    if property_obj.review_status != "approved":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Property is not approved")
+    existing_active = db.query(Contract).filter(
+        Contract.property_id == contract_in.property_id,
+        Contract.status.in_(["pending_sign", "pending_landlord_sign", "pending_tenant_sign", "active"])
+    ).first()
+    if existing_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Property already has an active or pending contract")
+    contract = Contract(
+        contract_no=f"CT{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
+        property_id=contract_in.property_id,
+        landlord_id=property_obj.owner_id,
+        tenant_id=current_user.id,
+        start_date=contract_in.start_date or datetime.datetime.utcnow(),
+        end_date=contract_in.end_date or (datetime.datetime.utcnow() + datetime.timedelta(days=365)),
+        monthly_rent=property_obj.rent,
+        deposit=contract_in.deposit if contract_in.deposit is not None else property_obj.deposit,
+        payment_day=contract_in.payment_day if contract_in.payment_day is not None else 1,
+        terms=contract_in.terms,
+        status="pending_sign",
+    )
+    db.add(contract)
+    db.commit()
+    db.refresh(contract)
+    ip_address = request.client.host if request.client else None
+    crud_audit.create_audit_log(
+        db,
+        user_id=current_user.id,
+        action="create_contract",
+        target_type="contract",
+        target_id=contract.id,
+        detail=f"Contract auto-created by tenant for property {contract.property_id}",
         ip_address=ip_address,
     )
     return contract
@@ -95,9 +150,9 @@ def sign_contract_landlord(contract_id: int, request: Request, db: Session = Dep
     if contract.signed_by_landlord:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already signed by landlord")
     contract.signed_by_landlord = 1
+    contract.landlord_signed_at = datetime.utcnow()
     if contract.signed_by_tenant:
         contract.status = "active"
-        contract.landlord_signed_at = datetime.utcnow()
         # 合同生效，更新房源状态为已出租
         property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
         if property_obj:
@@ -119,36 +174,35 @@ def sign_contract_landlord(contract_id: int, request: Request, db: Session = Dep
     return contract
 
 
-
-@router.put("/{contract_id}/sign/landlord", response_model=ContractSchema)
-def sign_contract_landlord(contract_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+@router.put("/{contract_id}/sign/tenant", response_model=ContractSchema)
+def sign_contract_tenant(contract_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
     contract = crud_contract.get_contract(db, contract_id)
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-    if contract.landlord_id != current_user.id:
+    if contract.tenant_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    if contract.signed_by_landlord:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already signed by landlord")
-    contract.signed_by_landlord = 1
     if contract.signed_by_tenant:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already signed by tenant")
+    contract.signed_by_tenant = 1
+    contract.tenant_signed_at = datetime.utcnow()
+    if contract.signed_by_landlord:
         contract.status = "active"
-        contract.landlord_signed_at = datetime.utcnow()
         # 合同生效，更新房源状态为已出租
         property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
         if property_obj:
             property_obj.status = "rented"
     else:
-        contract.status = "pending_tenant_sign"
+        contract.status = "pending_landlord_sign"
     db.commit()
     db.refresh(contract)
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
-        action="sign_contract_landlord",
+        action="sign_contract_tenant",
         target_type="contract",
         target_id=contract.id,
-        detail="Contract signed by landlord",
+        detail="Contract signed by tenant",
         ip_address=ip_address,
     )
     return contract

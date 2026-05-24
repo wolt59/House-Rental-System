@@ -6,10 +6,10 @@
     <el-table :data="list" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column label="房源" width="100">
-        <template #default="{ row }">房源#{{ row.property_id }}</template>
+        <template #default="{ row }">{{ propertyNames[row.property_id] || '加载中...' }}</template>
       </el-table-column>
       <el-table-column label="租客" width="100">
-        <template #default="{ row }">用户#{{ row.tenant_id }}</template>
+        <template #default="{ row }">{{ userNames[row.tenant_id] || '加载中...' }}</template>
       </el-table-column>
       <el-table-column prop="title" label="标题" width="200" />
       <el-table-column prop="description" label="描述" />
@@ -32,6 +32,11 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!loading && list.length === 0" description="暂无数据" />
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
+    </div>
 
     <el-dialog v-model="detailVisible" title="维修详情" width="600px">
       <el-descriptions :column="2" border v-if="currentItem">
@@ -80,9 +85,15 @@
 import { ref, reactive, onMounted } from 'vue'
 import { getMaintenances, updateMaintenance } from '../../api/maintenance'
 import { ElMessage } from 'element-plus'
+import { useNameResolver } from '../../composables/useNameResolver'
+
+const { resolveItems, userNames, propertyNames } = useNameResolver()
 
 const list = ref([])
 const loading = ref(false)
+const total = ref(0)
+const pageSize = ref(10)
+const currentPage = ref(1)
 const detailVisible = ref(false)
 const processVisible = ref(false)
 const resolveVisible = ref(false)
@@ -91,9 +102,9 @@ const processForm = reactive({ assigned_to: '', remark: '' })
 const resolveForm = reactive({ feedback: '' })
 
 const priorityMap = { low: '低', normal: '普通', high: '高', urgent: '紧急' }
-const priorityTypeMap = { low: 'info', normal: '', high: 'warning', urgent: 'danger' }
+const priorityTypeMap = { low: 'info', normal: 'info', high: 'warning', urgent: 'danger' }
 const statusMap = { new: '新建', in_progress: '处理中', resolved: '已解决', closed: '已关闭' }
-const statusTypeMap = { new: 'info', in_progress: 'warning', resolved: 'success', closed: '' }
+const statusTypeMap = { new: 'info', in_progress: 'warning', resolved: 'success', closed: 'info' }
 
 function priorityLabel(p) { return priorityMap[p] || p }
 function priorityType(p) { return priorityTypeMap[p] || 'info' }
@@ -105,8 +116,10 @@ async function loadData() {
   loading.value = true
   try {
     // 房东查看自己房源的维修申请
-    const res = await getMaintenances({ limit: 50 })
+    const res = await getMaintenances({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
     list.value = Array.isArray(res) ? res : []
+    await resolveItems(list.value, ['tenant_id', 'property_id'])
+    total.value = Array.isArray(res) ? res.length : 0
   } catch (e) {
     ElMessage.error('加载失败')
   } finally {
@@ -164,3 +177,7 @@ async function submitResolve() {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+</style>

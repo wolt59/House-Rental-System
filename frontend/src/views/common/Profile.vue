@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container" v-loading="loading">
     <div class="page-header"><h2>个人中心</h2></div>
     <el-row :gutter="20">
       <el-col :span="8">
@@ -71,14 +71,15 @@ const user = computed(() => userStore.user)
 const activeTab = ref('info')
 const saving = ref(false)
 const pwdSaving = ref(false)
+const loading = ref(false)
 
 const roleLabel = computed(() => {
   const map = { admin: '管理员', landlord: '房东', tenant: '租客' }
   return map[user.value?.role] || ''
 })
 const roleTagType = computed(() => {
-  const map = { admin: 'danger', landlord: 'warning', tenant: '' }
-  return map[user.value?.role] || ''
+  const map = { admin: 'danger', landlord: 'warning', tenant: 'info' }
+  return map[user.value?.role] || 'info'
 })
 
 const infoForm = reactive({
@@ -107,7 +108,9 @@ async function handleSaveInfo() {
     await updateMe(infoForm)
     await userStore.fetchUser()
     ElMessage.success('信息已更新')
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('更新个人信息失败')
+  } finally {
     saving.value = false
   }
 }
@@ -128,7 +131,9 @@ async function handleChangePwd() {
     pwdForm.old_password = ''
     pwdForm.new_password = ''
     pwdForm.confirm_password = ''
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('修改密码失败')
+  } finally {
     pwdSaving.value = false
   }
 }

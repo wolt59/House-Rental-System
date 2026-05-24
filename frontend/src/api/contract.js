@@ -12,6 +12,10 @@ export function createContract(data) {
   return request.post('/api/v1/contracts/', data)
 }
 
+export function autoCreateContract(data) {
+  return request.post('/api/v1/contracts/auto-create', data)
+}
+
 export function updateContract(id, data) {
   return request.put(`/api/v1/contracts/${id}`, data)
 }

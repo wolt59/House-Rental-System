@@ -24,6 +24,11 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!loading && contracts.length === 0" description="暂无数据" />
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
+    </div>
 
     <el-dialog v-model="detailVisible" title="合同详情" width="600px">
       <el-descriptions :column="2" border v-if="currentContract">
@@ -48,6 +53,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const contracts = ref([])
 const loading = ref(false)
+const total = ref(0)
+const pageSize = ref(10)
+const currentPage = ref(1)
 const detailVisible = ref(false)
 const currentContract = ref(null)
 
@@ -60,9 +68,12 @@ function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : ''
 async function loadData() {
   loading.value = true
   try {
-    const res = await getContracts({ limit: 50 })
+    const res = await getContracts({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
     contracts.value = Array.isArray(res) ? res : []
-  } catch (e) {} finally {
+    total.value = Array.isArray(res) ? res.length : 0
+  } catch (e) {
+    ElMessage.error('加载合同列表失败')
+  } finally {
     loading.value = false
   }
 }
@@ -70,10 +81,16 @@ async function loadData() {
 async function handleSign(row) {
   try {
     await ElMessageBox.confirm('确定签署此合同？', '确认签约', { type: 'warning' })
+  } catch {
+    return // 用户取消操作
+  }
+  try {
     await signContractTenant(row.id)
     ElMessage.success('签约成功')
     loadData()
-  } catch (e) {}
+  } catch (e) {
+    ElMessage.error('签约失败')
+  }
 }
 
 function viewDetail(row) {
@@ -83,3 +100,7 @@ function viewDetail(row) {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+</style>

@@ -54,6 +54,7 @@
 import { ref, onMounted } from 'vue'
 import { getRegionStats, getFloorPlanStats } from '../../api/stats'
 import { getProperties } from '../../api/property'
+import { ElMessage } from 'element-plus'
 
 const activeTab = ref('region')
 const regionStats = ref([])
@@ -74,14 +75,18 @@ async function searchByRegion(region) {
   try {
     const res = await getProperties({ region, limit: 20 })
     searchResults.value = Array.isArray(res) ? res : []
-  } catch (e) {}
+  } catch (e) {
+    ElMessage.error('按地区搜索失败')
+  }
 }
 
 async function searchByFloorPlan(floor_plan) {
   try {
     const res = await getProperties({ floor_plan, limit: 20 })
     searchResults.value = Array.isArray(res) ? res : []
-  } catch (e) {}
+  } catch (e) {
+    ElMessage.error('按户型搜索失败')
+  }
 }
 
 onMounted(async () => {
@@ -91,7 +96,9 @@ onMounted(async () => {
     const [rRes, fRes] = await Promise.all([getRegionStats(), getFloorPlanStats()])
     regionStats.value = Array.isArray(rRes) ? rRes : []
     floorPlanStats.value = Array.isArray(fRes) ? fRes : []
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('加载统计数据失败')
+  } finally {
     regionLoading.value = false
     fpLoading.value = false
   }

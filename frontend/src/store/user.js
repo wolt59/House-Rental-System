@@ -18,9 +18,16 @@ export const useUserStore = defineStore('user', () => {
     token.value = res.access_token
     sessionStorage.setItem('token', res.access_token)
 
-    await new Promise(resolve => setTimeout(resolve, 50))
-
-    await fetchUser()
+    try {
+      await fetchUser()
+    } catch (error) {
+      // fetchUser 失败时回滚 token，避免 isLoggedIn=true 但 user=null 的不一致状态
+      token.value = ''
+      user.value = null
+      sessionStorage.removeItem('token')
+      sessionStorage.removeItem('user')
+      throw error
+    }
   }
 
   async function register(data) {
@@ -28,21 +35,33 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function fetchUser() {
-    try {
-      const res = await getMe()
-      user.value = res
-      sessionStorage.setItem('user', JSON.stringify(res))
-    } catch (error) {
-      console.error('获取用户信息失败:', error)
-      throw error
+    const maxRetries = 2
+    for (let i = 0; i <= maxRetries; i++) {
+      try {
+        const res = await getMe()
+        user.value = res
+        sessionStorage.setItem('user', JSON.stringify(res))
+        return
+      } catch (error) {
+        if (i < maxRetries && error.response?.status === 401) {
+          // 登录后后端 token 可能尚未就绪，短暂等待后重试
+          await new Promise(resolve => setTimeout(resolve, 200))
+          continue
+        }
+        console.error('获取用户信息失败:', error)
+        throw error
+      }
     }
   }
 
-  function logout() {
+  function logout(router) {
     token.value = ''
     user.value = null
     sessionStorage.removeItem('token')
     sessionStorage.removeItem('user')
+    if (router) {
+      router.push('/login')
+    }
   }
 
   return { token, user, isLoggedIn, userRole, isAdmin, isLandlord, isTenant, login, register, fetchUser, logout }

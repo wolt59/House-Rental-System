@@ -17,6 +17,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getNews } from '../../api/news'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const news = ref(null)
@@ -31,7 +32,9 @@ onMounted(async () => {
   loading.value = true
   try {
     news.value = await getNews(route.params.id)
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('加载新闻详情失败')
+  } finally {
     loading.value = false
   }
 })

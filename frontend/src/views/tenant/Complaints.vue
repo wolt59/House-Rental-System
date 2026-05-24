@@ -21,11 +21,18 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!loading && list.length === 0" description="暂无数据" />
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
+    </div>
 
     <el-dialog v-model="showDialog" title="提交投诉" width="500px">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="房源ID">
-          <el-input v-model.number="form.property_id" />
+        <el-form-item label="房源">
+          <el-select v-model="form.property_id" placeholder="请选择房源" filterable style="width: 100%">
+            <el-option v-for="p in myProperties" :key="p.id" :label="p.title" :value="p.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="投诉类型">
           <el-select v-model="form.complaint_type">
@@ -61,16 +68,21 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { getComplaints, createComplaint } from '../../api/complaint'
+import { getProperties } from '../../api/property'
 import { ElMessage } from 'element-plus'
 
 const list = ref([])
 const loading = ref(false)
+const total = ref(0)
+const pageSize = ref(10)
+const currentPage = ref(1)
 const showDialog = ref(false)
 const detailVisible = ref(false)
 const submitting = ref(false)
 const currentItem = ref(null)
+const myProperties = ref([])
 const form = reactive({ property_id: '', complaint_type: '', title: '', content: '' })
 
 const statusMap = { open: '待处理', in_progress: '处理中', resolved: '已解决', closed: '已关闭' }
@@ -78,19 +90,31 @@ const statusTypeMap = { open: 'danger', in_progress: 'warning', resolved: 'succe
 function statusLabel(s) { return statusMap[s] || s }
 function statusType(s) { return statusTypeMap[s] || 'info' }
 
+async function loadMyProperties() {
+  try {
+    const res = await getProperties({ limit: 100 })
+    myProperties.value = Array.isArray(res) ? res : []
+  } catch (e) {
+    ElMessage.error('加载房源列表失败')
+  }
+}
+
 async function loadData() {
   loading.value = true
   try {
-    const res = await getComplaints({ limit: 50 })
+    const res = await getComplaints({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
     list.value = Array.isArray(res) ? res : []
-  } catch (e) {} finally {
+    total.value = Array.isArray(res) ? res.length : 0
+  } catch (e) {
+    ElMessage.error('加载投诉列表失败')
+  } finally {
     loading.value = false
   }
 }
 
 async function handleSubmit() {
   if (!form.property_id || !form.content) {
-    ElMessage.warning('请填写房源ID和内容')
+    ElMessage.warning('请选择房源并填写内容')
     return
   }
   submitting.value = true
@@ -103,7 +127,9 @@ async function handleSubmit() {
     form.title = ''
     form.content = ''
     loadData()
-  } catch (e) {} finally {
+  } catch (e) {
+    ElMessage.error('提交投诉失败')
+  } finally {
     submitting.value = false
   }
 }
@@ -114,4 +140,12 @@ function viewDetail(row) {
 }
 
 onMounted(loadData)
+
+watch(showDialog, (val) => {
+  if (val) loadMyProperties()
+})
 </script>
+
+<style scoped>
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+</style>

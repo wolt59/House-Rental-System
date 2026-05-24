@@ -16,6 +16,15 @@ class ContractCreate(BaseModel):
     remark: Optional[str] = None
 
 
+class ContractAutoCreate(BaseModel):
+    property_id: int
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    deposit: Optional[float] = None
+    payment_day: Optional[int] = None
+    terms: Optional[str] = None
+
+
 class ContractUpdate(BaseModel):
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None

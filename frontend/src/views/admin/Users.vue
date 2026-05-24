@@ -37,9 +37,14 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!loading && users.length === 0" description="暂无数据" />
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
+    </div>
 
     <el-dialog v-model="editVisible" title="编辑用户" width="500px">
-      <el-form :model="editForm" label-width="80px">
+      <el-form ref="formRef" :model="editForm" label-width="80px" :rules="userRules">
         <el-form-item label="手机号"><el-input v-model="editForm.phone" /></el-form-item>
         <el-form-item label="姓名"><el-input v-model="editForm.full_name" /></el-form-item>
         <el-form-item label="角色">
@@ -65,13 +70,22 @@ import { ElMessage } from 'element-plus'
 
 const users = ref([])
 const loading = ref(false)
+const total = ref(0)
+const pageSize = ref(10)
+const currentPage = ref(1)
 const editVisible = ref(false)
 const saving = ref(false)
+const formRef = ref(null)
 const filters = reactive({ role: '' })
 const editForm = reactive({ id: '', phone: '', full_name: '', role: '' })
 
+const userRules = {
+  full_name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+}
+
 const roleMap = { admin: '管理员', landlord: '房东', tenant: '租客' }
-const roleTypeMap = { admin: 'danger', landlord: 'warning', tenant: '' }
+const roleTypeMap = { admin: 'danger', landlord: 'warning', tenant: 'info' }
 function roleLabel(r) { return roleMap[r] || r }
 function roleType(r) { return roleTypeMap[r] || 'info' }
 function formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : '' }
@@ -79,11 +93,12 @@ function formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : '' }
 async function loadData() {
   loading.value = true
   try {
-    const params = { limit: 50 }
+    const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
     if (filters.role) params.role = filters.role
     const res = await getUsers(params)
     users.value = Array.isArray(res) ? res : []
-  } catch (e) {} finally {
+    total.value = Array.isArray(res) ? res.length : 0
+  } catch (e) { ElMessage.error('加载用户列表失败') } finally {
     loading.value = false
   }
 }
@@ -97,13 +112,15 @@ function openEditDialog(row) {
 }
 
 async function handleSave() {
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
   saving.value = true
   try {
     await updateUser(editForm.id, { phone: editForm.phone, full_name: editForm.full_name, role: editForm.role })
     ElMessage.success('更新成功')
     editVisible.value = false
     loadData()
-  } catch (e) {} finally {
+  } catch (e) { ElMessage.error('保存用户信息失败') } finally {
     saving.value = false
   }
 }
@@ -113,8 +130,12 @@ async function handleToggleStatus(row) {
     await toggleUserStatus(row.id)
     ElMessage.success('状态已更新')
     loadData()
-  } catch (e) {}
+  } catch (e) { ElMessage.error('更新用户状态失败') }
 }
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+</style>

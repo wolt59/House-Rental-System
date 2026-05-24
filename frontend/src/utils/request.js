@@ -23,13 +23,16 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const msg = error.response?.data?.detail || error.message || '请求失败'
     if (error.response?.status === 401) {
-      const userStore = useUserStore()
-      userStore.logout()
-      router.push('/login')
-      ElMessage.error('登录已过期，请重新登录')
+      if (error.config?.url?.includes('/api/v1/auth/login')) {
+        // login endpoint returns 401 for wrong credentials — let the caller handle it
+      } else {
+        const userStore = useUserStore()
+        userStore.logout(router)
+        ElMessage.error('登录已过期，请重新登录')
+      }
     } else {
+      const msg = error.response?.data?.detail || (error.message === 'Network Error' ? '网络连接失败，请检查服务器' : error.message) || '请求失败'
       ElMessage.error(msg)
     }
     return Promise.reject(error)

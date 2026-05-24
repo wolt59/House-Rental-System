@@ -29,7 +29,7 @@
       <el-table-column prop="title" label="标题" width="200" />
       <el-table-column prop="address" label="地址" />
       <el-table-column label="房东" width="100">
-        <template #default="{ row }">用户#{{ row.owner_id }}</template>
+        <template #default="{ row }">{{ userNames[row.owner_id] || '加载中...' }}</template>
       </el-table-column>
       <el-table-column label="租金" width="100">
         <template #default="{ row }">¥{{ row.rent }}/月</template>
@@ -53,6 +53,11 @@
         </template>
       </el-table-column>
     </el-table>
+    <el-empty v-if="!loading && properties.length === 0" description="暂无数据" />
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
+    </div>
 
     <el-dialog v-model="detailVisible" title="房源详情" width="600px">
       <el-descriptions :column="2" border v-if="currentProperty">
@@ -61,7 +66,7 @@
         <el-descriptions-item label="租金">¥{{ currentProperty.rent }}/月</el-descriptions-item>
         <el-descriptions-item label="面积">{{ currentProperty.area }}㎡</el-descriptions-item>
         <el-descriptions-item label="户型">{{ currentProperty.floor_plan }}</el-descriptions-item>
-        <el-descriptions-item label="房东">用户#{{ currentProperty.owner_id }}</el-descriptions-item>
+        <el-descriptions-item label="房东">{{ userNames[currentProperty.owner_id] || '加载中...' }}</el-descriptions-item>
         <el-descriptions-item label="审核状态">{{ reviewLabel(currentProperty.review_status) }}</el-descriptions-item>
         <el-descriptions-item label="房源状态">{{ statusLabel(currentProperty.status) }}</el-descriptions-item>
         <el-descriptions-item label="描述" :span="2">{{ currentProperty.description || '-' }}</el-descriptions-item>
@@ -74,12 +79,17 @@
 import { ref, reactive, onMounted } from 'vue'
 import { getProperties, reviewProperty, deleteProperty } from '../../api/property'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useNameResolver } from '../../composables/useNameResolver'
 
 const properties = ref([])
 const loading = ref(false)
+const total = ref(0)
+const pageSize = ref(10)
+const currentPage = ref(1)
 const detailVisible = ref(false)
 const currentProperty = ref(null)
 const filters = reactive({ review_status: '', status: '', keyword: '' })
+const { resolveItems, userNames, propertyNames } = useNameResolver()
 
 const reviewMap = { pending: '待审核', approved: '已通过', rejected: '已拒绝' }
 const reviewTypeMap = { pending: 'warning', approved: 'success', rejected: 'danger' }
@@ -100,26 +110,36 @@ function resetFilters() {
 async function loadData() {
   loading.value = true
   try {
-    const params = { limit: 50 }
+    const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
     if (filters.review_status) params.review_status = filters.review_status
     if (filters.status) params.status = filters.status
     if (filters.keyword) params.keyword = filters.keyword
     const res = await getProperties(params)
     properties.value = Array.isArray(res) ? res : []
-  } catch (e) {} finally {
+    if (properties.value.length) await resolveItems(properties.value, ['owner_id'])
+    total.value = Array.isArray(res) ? res.length : 0
+  } catch (e) { ElMessage.error('加载房源列表失败') } finally {
     loading.value = false
   }
 }
 
 async function handleReview(row, reviewStatus) {
+  let comment = ''
+  if (reviewStatus === 'rejected') {
+    try {
+      const result = await ElMessageBox.prompt('请输入拒绝原因', '拒绝审核', { confirmButtonText: '确定', cancelButtonText: '取消' })
+      comment = result.value
+    } catch {
+      return // 用户取消
+    }
+  }
   try {
-    const comment = reviewStatus === 'rejected'
-      ? (await ElMessageBox.prompt('请输入拒绝原因', '拒绝审核', { confirmButtonText: '确定', cancelButtonText: '取消' })).value
-      : ''
     await reviewProperty(row.id, { review_status: reviewStatus, comment })
     ElMessage.success(reviewStatus === 'approved' ? '已通过' : '已拒绝')
     loadData()
-  } catch (e) {}
+  } catch (e) {
+    ElMessage.error('审核操作失败')
+  }
 }
 
 function viewDetail(row) {
@@ -130,11 +150,21 @@ function viewDetail(row) {
 async function handleDelete(row) {
   try {
     await ElMessageBox.confirm('确定删除该房源？此操作不可恢复', '确认删除', { type: 'warning' })
+  } catch {
+    return // 用户取消
+  }
+  try {
     await deleteProperty(row.id)
     ElMessage.success('已删除')
     loadData()
-  } catch (e) {}
+  } catch (e) {
+    ElMessage.error('删除房源失败')
+  }
 }
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+</style>

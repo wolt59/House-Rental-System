@@ -5,7 +5,7 @@
     <!-- 核心指标卡片 -->
     <div class="stat-cards" v-if="dashboard">
       <div class="stat-card primary">
-        <div class="stat-icon"></div>
+        <div class="stat-icon">👥</div>
         <div class="stat-value">{{ dashboard.users?.total || 0 }}</div>
         <div class="stat-label">用户总数</div>
       </div>
@@ -38,7 +38,7 @@
 
         <el-row :gutter="20" style="margin-top: 20px">
       <!-- 房源状态分布饼图 -->
-      <el-col :span="12">
+      <el-col :span="8">
         <el-card class="chart-card">
           <template #header><span>房源状态分布</span></template>
           <div ref="propertyStatusChart" style="height: 300px"></div>
@@ -46,10 +46,18 @@
       </el-col>
 
       <!-- 用户角色分布饼图 -->
-      <el-col :span="12">
+      <el-col :span="8">
         <el-card class="chart-card">
           <template #header><span>用户角色分布</span></template>
           <div ref="userRoleChart" style="height: 300px"></div>
+        </el-card>
+      </el-col>
+
+      <!-- 出租率仪表盘 -->
+      <el-col :span="8">
+        <el-card class="chart-card">
+          <template #header><span>出租率</span></template>
+          <div ref="occupancyChart" style="height: 300px"></div>
         </el-card>
       </el-col>
     </el-row>
@@ -96,7 +104,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { getDashboard, getMonthlyIncome, getUserActivity, getPropertyStatus } from '../../api/stats'
 import * as echarts from 'echarts'
 
@@ -344,12 +352,11 @@ async function loadData() {
 
     dashboard.value = dashData
 
-    setTimeout(() => {
-      initPropertyStatusChart(propertyData)
-      initUserRoleChart(userData)
-      initOccupancyChart(dashData.properties?.occupancy_rate || 0)
-      initIncomeChart(incomeData)
-    }, 100)
+    await nextTick()
+    initPropertyStatusChart(propertyData)
+    initUserRoleChart(userData)
+    initOccupancyChart(dashData.properties?.occupancy_rate || 0)
+    initIncomeChart(incomeData)
   } catch (e) {
     console.error('加载数据失败:', e)
   }

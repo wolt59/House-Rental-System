@@ -2,10 +2,11 @@
   <div class="page-container">
     <div class="page-header"><h2>我的数据面板</h2></div>
 
+    <div v-loading="!dashboard" element-loading-text="加载中..." style="min-height: 300px">
     <!-- 核心指标 -->
     <div class="stat-cards" v-if="dashboard">
       <div class="stat-card primary">
-        <div class="stat-icon"></div>
+        <div class="stat-icon">🏠</div>
         <div class="stat-value">{{ dashboard.properties?.total || 0 }}</div>
         <div class="stat-label">房源总数</div>
       </div>
@@ -91,11 +92,13 @@
         </el-card>
       </el-col>
     </el-row>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { getLandlordDashboard, getLandlordMonthlyIncome } from '../../api/stats'
 import * as echarts from 'echarts'
 
@@ -213,12 +216,11 @@ async function loadData() {
 
     dashboard.value = dashData
 
-    setTimeout(() => {
-      initIncomeChart(incomeData)
-      initPropertyChart(dashData.properties)
-    }, 100)
+    await nextTick()
+    initIncomeChart(incomeData)
+    initPropertyChart(dashData.properties)
   } catch (e) {
-    console.error('加载数据失败:', e)
+    ElMessage.error('加载数据失败')
   }
 }
 
