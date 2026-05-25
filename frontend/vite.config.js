@@ -1,19 +1,25 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import path from 'path'
 
-export default defineConfig({
-  plugins: [vue()],
-  server: {
-    port: 3000,
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-      },
-      '/uploads': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
+export default defineConfig(({ mode }) => {
+  // 加载项目根目录的环境变量
+  const rootEnv = loadEnv(mode, path.resolve(__dirname, '..'), '')
+  
+  return {
+    plugins: [vue()],
+    server: {
+      port: 3000,
+      proxy: {
+        '/api': {
+          target: rootEnv.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
+          changeOrigin: true,
+        },
+        '/uploads': {
+          target: rootEnv.VITE_UPLOADS_BASE_URL || 'http://127.0.0.1:8000',
+          changeOrigin: true,
+        },
       },
     },
-  },
+  }
 })
