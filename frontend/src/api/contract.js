@@ -28,6 +28,22 @@ export function signContractTenant(id) {
   return request.put(`/api/v1/contracts/${id}/sign/tenant`)
 }
 
-export function terminateContract(id) {
-  return request.put(`/api/v1/contracts/${id}/terminate`)
+export function withdrawSignatureLandlord(id) {
+  return request.put(`/api/v1/contracts/${id}/withdraw/landlord`)
+}
+
+export function withdrawSignatureTenant(id) {
+  return request.put(`/api/v1/contracts/${id}/withdraw/tenant`)
+}
+
+export function cancelContract(id) {
+  return request.put(`/api/v1/contracts/${id}/cancel`)
+}
+
+export function rejectContract(id, data) {
+  return request.put(`/api/v1/contracts/${id}/reject`, data)
+}
+
+export function terminateContract(id, data) {
+  return request.put(`/api/v1/contracts/${id}/terminate`, data)
 }
