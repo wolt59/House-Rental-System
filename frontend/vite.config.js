@@ -9,7 +9,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [vue()],
     server: {
-      port: 3000,
+      host: rootEnv.FRONTEND_HOST || 'localhost',
+      port: parseInt(rootEnv.FRONTEND_PORT) || 3000,
       proxy: {
         '/api': {
           target: rootEnv.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
