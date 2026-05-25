@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class PaymentCreate(BaseModel):
     contract_id: int
@@ -20,7 +22,7 @@ class PaymentUpdate(BaseModel):
     remark: Optional[str] = None
 
 
-class Payment(BaseModel):
+class Payment(UTCDatetimeModel):
     id: int
     payment_no: Optional[str] = None
     contract_id: int

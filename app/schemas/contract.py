@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.common import UTCDatetimeModel
+
 
 class ContractCreate(BaseModel):
     property_id: int
@@ -62,7 +64,7 @@ class ContractTerminate(BaseModel):
     reason: Optional[str] = Field(None, max_length=500, description="终止原因")
 
 
-class Contract(BaseModel):
+class Contract(UTCDatetimeModel):
     id: int
     contract_no: Optional[str] = None
     property_id: int
