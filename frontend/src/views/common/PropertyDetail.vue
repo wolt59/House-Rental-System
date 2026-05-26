@@ -116,11 +116,23 @@ const bookingRules = {
 }
 
 const statusType = computed(() => {
-  const map = { vacant: 'success', rented: 'warning', maintenance: 'danger' }
+  const map = { 
+    published: 'success', 
+    unpublished: 'info',
+    vacant: 'success', 
+    rented: 'warning', 
+    maintenance: 'danger' 
+  }
   return map[property.value.status] || 'info'
 })
 const statusLabel = computed(() => {
-  const map = { vacant: '空置', rented: '已出租', maintenance: '维修中' }
+  const map = { 
+    published: '已发布', 
+    unpublished: '未发布',
+    vacant: '空置', 
+    rented: '已出租', 
+    maintenance: '维修中' 
+  }
   return map[property.value.status] || property.value.status
 })
 

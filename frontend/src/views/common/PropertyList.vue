@@ -32,8 +32,8 @@
           </div>
           <div class="tags">
             <el-tag size="small" v-if="p.region">{{ p.region }}</el-tag>
-            <el-tag size="small" :type="p.status === 'vacant' ? 'success' : 'warning'">
-              {{ p.status === 'vacant' ? '空置' : '已出租' }}
+            <el-tag size="small" :type="statusType(p.status)">
+              {{ statusLabel(p.status) }}
             </el-tag>
           </div>
         </div>
@@ -57,6 +57,30 @@ const total = ref(0)
 const pageSize = 12
 const currentPage = ref(1)
 const filters = reactive({ region: '', floor_plan: '' })
+
+// 房源状态映射
+const statusMap = {
+  published: '已发布',
+  unpublished: '未发布',
+  vacant: '空置',
+  rented: '已出租',
+  maintenance: '维修中'
+}
+const statusTypeMap = {
+  published: 'success',
+  unpublished: 'info',
+  vacant: 'success',
+  rented: 'warning',
+  maintenance: 'danger'
+}
+
+function statusLabel(status) {
+  return statusMap[status] || status
+}
+
+function statusType(status) {
+  return statusTypeMap[status] || 'info'
+}
 
 function getCoverImage(p) {
   if (p.images && p.images.length > 0) {
