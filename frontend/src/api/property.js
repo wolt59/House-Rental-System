@@ -36,6 +36,18 @@ export function changePropertyStatus(id, data) {
   return request.put(`/api/v1/properties/${id}/status`, data)
 }
 
+export function submitForReview(id) {
+  return request.post(`/api/v1/properties/${id}/submit-review`)
+}
+
+export function unpublishProperty(id) {
+  return request.post(`/api/v1/properties/${id}/unpublish`)
+}
+
+export function republishProperty(id) {
+  return request.post(`/api/v1/properties/${id}/republish`)
+}
+
 export function getPropertyImages(propertyId) {
   return request.get(`/api/v1/property-images/${propertyId}/images`)
 }

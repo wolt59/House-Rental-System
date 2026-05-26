@@ -7,6 +7,7 @@ from app.models.property import Property
 from app.schemas.contract import ContractCreate, ContractUpdate
 from app.core.enums import (
     ContractStatus,
+    PropertyStatus,
     CANCELLABLE_STATUSES,
     REJECTABLE_STATUSES,
     ACTIVE_OR_PENDING_STATUSES,
@@ -155,8 +156,8 @@ def check_property_has_active_contract(db: Session, property_id: int, exclude_co
 def restore_property_status_on_cancel(db: Session, property_id: int) -> None:
     """合同取消/拒绝后，恢复房源状态为空闲"""
     property_obj = db.query(Property).filter(Property.id == property_id).first()
-    if property_obj and property_obj.status == "rented":
+    if property_obj and property_obj.status == PropertyStatus.RENTED:
         # 只有当没有其他活跃合同时才恢复状态
         if not check_property_has_active_contract(db, property_id):
-            property_obj.status = "vacant"
+            property_obj.status = PropertyStatus.VACANT
             db.commit()

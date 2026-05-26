@@ -40,8 +40,6 @@ class PropertyBase(BaseModel):
     video_url: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    status: Optional[str] = "vacant"
-    review_status: Optional[str] = "pending"
     description: Optional[str] = None
 
 
@@ -76,7 +74,13 @@ class PropertyInDBBase(PropertyBase, UTCDatetimeModel):
     id: int
     owner_id: int
     view_count: int
+    status: str
+    review_status: str
     review_comment: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    published_at: Optional[datetime] = None
+    unpublished_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     images: Optional[List[PropertyImage]] = []
@@ -96,6 +100,16 @@ class PropertyReview(BaseModel):
 
 class PropertyStatusUpdate(BaseModel):
     status: str
+
+
+class PropertySubmitForReview(BaseModel):
+    """提交审核请求"""
+    pass
+
+
+class PropertyRepublish(BaseModel):
+    """重新发布请求"""
+    pass
 
 
 class RegionStats(BaseModel):

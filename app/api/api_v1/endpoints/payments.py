@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_active_user, get_current_active_admin, get_db
 from app.crud import crud_audit, crud_payment, crud_contract
 from app.schemas.payment import Payment as PaymentSchema, PaymentCreate, PaymentUpdate
+from app.core.enums import PaymentStatus
 
 router = APIRouter()
 

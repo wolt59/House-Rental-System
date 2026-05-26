@@ -4,13 +4,17 @@
     <el-form :inline="true" :model="filters" style="margin-bottom: 16px">
       <el-form-item label="审核状态">
         <el-select v-model="filters.review_status" clearable placeholder="全部" @change="loadData">
+          <el-option label="草稿" value="draft" />
           <el-option label="待审核" value="pending" />
+          <el-option label="审核中" value="reviewing" />
           <el-option label="已通过" value="approved" />
           <el-option label="已拒绝" value="rejected" />
         </el-select>
       </el-form-item>
       <el-form-item label="房源状态">
         <el-select v-model="filters.status" clearable placeholder="全部" @change="loadData">
+          <el-option label="已发布" value="published" />
+          <el-option label="未发布" value="unpublished" />
           <el-option label="空置" value="vacant" />
           <el-option label="已出租" value="rented" />
           <el-option label="维修中" value="maintenance" />
@@ -44,10 +48,16 @@
           <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="260">
+      <el-table-column label="操作" width="320">
         <template #default="{ row }">
-          <el-button v-if="row.review_status === 'pending'" type="success" size="small" @click="handleReview(row, 'approved')">通过</el-button>
-          <el-button v-if="row.review_status === 'pending'" type="danger" size="small" @click="handleReview(row, 'rejected')">拒绝</el-button>
+          <el-button v-if="row.review_status === 'pending' || row.review_status === 'reviewing'" 
+                     type="success" size="small" @click="handleReview(row, 'approved')">通过</el-button>
+          <el-button v-if="row.review_status === 'pending' || row.review_status === 'reviewing'" 
+                     type="danger" size="small" @click="handleReview(row, 'rejected')">拒绝</el-button>
+          <el-button v-if="row.review_status === 'approved' && row.status === 'published'" 
+                     type="warning" size="small" @click="handleAdminUnpublish(row)">下架</el-button>
+          <el-button v-if="row.review_status === 'approved' && row.status === 'unpublished'" 
+                     type="success" size="small" @click="handleAdminRepublish(row)">恢复发布</el-button>
           <el-button size="small" @click="viewDetail(row)">详情</el-button>
           <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
         </template>
@@ -77,7 +87,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getProperties, reviewProperty, deleteProperty } from '../../api/property'
+import { getProperties, reviewProperty, unpublishProperty, republishProperty, deleteProperty } from '../../api/property'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNameResolver } from '../../composables/useNameResolver'
 
@@ -91,10 +101,10 @@ const currentProperty = ref(null)
 const filters = reactive({ review_status: '', status: '', keyword: '' })
 const { resolveItems, userNames, propertyNames } = useNameResolver()
 
-const reviewMap = { pending: '待审核', approved: '已通过', rejected: '已拒绝' }
-const reviewTypeMap = { pending: 'warning', approved: 'success', rejected: 'danger' }
-const statusMap = { vacant: '空置', rented: '已出租', maintenance: '维修中' }
-const statusTypeMap = { vacant: 'success', rented: 'warning', maintenance: 'danger' }
+const reviewMap = { draft: '草稿', pending: '待审核', reviewing: '审核中', approved: '已通过', rejected: '已拒绝' }
+const reviewTypeMap = { draft: 'info', pending: 'warning', reviewing: 'primary', approved: 'success', rejected: 'danger' }
+const statusMap = { published: '已发布', unpublished: '未发布', vacant: '空置', rented: '已出租', maintenance: '维修中' }
+const statusTypeMap = { published: 'success', unpublished: 'info', vacant: 'success', rented: 'warning', maintenance: 'danger' }
 function reviewLabel(s) { return reviewMap[s] || s }
 function reviewType(s) { return reviewTypeMap[s] || 'info' }
 function statusLabel(s) { return statusMap[s] || s }
@@ -159,6 +169,34 @@ async function handleDelete(row) {
     loadData()
   } catch (e) {
     ElMessage.error('删除房源失败')
+  }
+}
+
+async function handleAdminUnpublish(row) {
+  try {
+    const result = await ElMessageBox.prompt('请输入下架原因', '下架房源', { 
+      confirmButtonText: '确定', 
+      cancelButtonText: '取消',
+      inputPattern: /.+/,
+      inputErrorMessage: '请输入下架原因'
+    })
+    await unpublishProperty(row.id, { reason: result.value })
+    ElMessage.success('已下架')
+    loadData()
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error(e.response?.data?.detail || '操作失败')
+    }
+  }
+}
+
+async function handleAdminRepublish(row) {
+  try {
+    await republishProperty(row.id)
+    ElMessage.success('已恢复发布')
+    loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '操作失败')
   }
 }
 

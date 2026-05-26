@@ -7,6 +7,7 @@ from app.crud import crud_audit, crud_maintenance
 from app.models.maintenance import MaintenanceRequest
 from app.models.property import Property
 from app.schemas.maintenance import Maintenance, MaintenanceCreate, MaintenanceUpdate
+from app.core.enums import MaintenanceStatus
 
 router = APIRouter()
 
@@ -77,14 +78,14 @@ def update_maintenance(request_id: int, request_in: MaintenanceUpdate, request: 
     _authorize_maintenance(request_item, current_user)
 
     if current_user.role == "tenant":
-        if request_item.status != "new":
+        if request_item.status != MaintenanceStatus.NEW:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only new maintenance requests can be updated by tenant")
-        if request_in.status and request_in.status != "new":
+        if request_in.status and request_in.status != MaintenanceStatus.NEW:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant cannot change status")
         if request_in.assigned_to is not None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant cannot assign maintenance tasks")
     else:
-        if request_in.status and request_in.status not in {"new", "in_progress", "resolved", "closed"}:
+        if request_in.status and request_in.status not in {MaintenanceStatus.NEW, MaintenanceStatus.IN_PROGRESS, MaintenanceStatus.RESOLVED, MaintenanceStatus.CLOSED}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid maintenance status")
 
     updated = crud_maintenance.update_maintenance(db, request_item, request_in)

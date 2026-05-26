@@ -28,10 +28,14 @@ class Property(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     view_count = Column(Integer, default=0)
-    status = Column(String(50), default="vacant")
-    review_status = Column(String(30), default="pending")
+    status = Column(String(50), default="unpublished")  # published/unpublished/vacant/rented/maintenance
+    review_status = Column(String(30), default="draft")  # draft/pending/reviewing/approved/rejected
     review_comment = Column(String(500), nullable=True)
     description = Column(Text, nullable=True)
+    submitted_at = Column(DateTime, nullable=True)  # 提交审核时间
+    approved_at = Column(DateTime, nullable=True)  # 审核通过时间
+    published_at = Column(DateTime, nullable=True)  # 发布时间
+    unpublished_at = Column(DateTime, nullable=True)  # 暂停发布时间
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -19,6 +19,8 @@ from app.schemas.contract import (
 )
 from app.core.enums import (
     ContractStatus,
+    PropertyReviewStatus,
+    PropertyStatus,
     CANCELLABLE_STATUSES,
     REJECTABLE_STATUSES,
 )
@@ -57,7 +59,7 @@ def create_contract(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="房源不存在")
     if property_obj.owner_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权为此房源创建合同")
-    if property_obj.review_status != "approved":
+    if property_obj.review_status != PropertyReviewStatus.APPROVED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="房源必须审核通过后才能创建合同")
 
     # 检查房源是否已有活跃合同
@@ -108,9 +110,9 @@ def auto_create_contract(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="房源不存在")
     if property_obj.owner_id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能租赁自己的房源")
-    if property_obj.review_status != "approved":
+    if property_obj.review_status != PropertyReviewStatus.APPROVED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="房源未通过审核")
-    if property_obj.status != "vacant":
+    if property_obj.status != PropertyStatus.VACANT:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="房源当前不可租赁")
 
     # 检查房源是否已有活跃合同
@@ -251,7 +253,7 @@ def sign_contract_landlord(
         contract.status = ContractStatus.ACTIVE
         property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
         if property_obj:
-            property_obj.status = "rented"
+            property_obj.status = PropertyStatus.RENTED
 
         # 通知租客合同已生效
         _send_message_to_user(
@@ -315,7 +317,7 @@ def sign_contract_tenant(
         contract.status = ContractStatus.ACTIVE
         property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
         if property_obj:
-            property_obj.status = "rented"
+            property_obj.status = PropertyStatus.RENTED
 
         # 通知房东合同已生效
         _send_message_to_user(
@@ -562,7 +564,7 @@ def terminate_contract(
     # 合同终止，恢复房源状态为空闲
     property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
     if property_obj:
-        property_obj.status = "vacant"
+        property_obj.status = PropertyStatus.VACANT
 
     # 通知对方
     if current_user.id == contract.landlord_id:

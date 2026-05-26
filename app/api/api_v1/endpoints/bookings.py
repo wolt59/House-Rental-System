@@ -7,6 +7,7 @@ from app.crud import crud_audit
 from app.models.booking import Booking
 from app.models.property import Property
 from app.schemas.booking import BookingCreate, Booking as BookingSchema, BookingUpdate
+from app.core.enums import BookingStatus
 
 router = APIRouter()
 
@@ -77,12 +78,12 @@ def update_booking(booking_id: int, booking_in: BookingUpdate, request: Request,
     _authorize_booking(booking, current_user)
 
     if current_user.role == "tenant":
-        if booking.status != "pending":
+        if booking.status != BookingStatus.PENDING:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending bookings can be updated")
-        if booking_in.status and booking_in.status != "cancelled":
+        if booking_in.status and booking_in.status != BookingStatus.CANCELLED:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant may only cancel the booking")
     else:
-        if booking_in.status and booking_in.status not in {"approved", "rejected", "cancelled"}:
+        if booking_in.status and booking_in.status not in {BookingStatus.APPROVED, BookingStatus.REJECTED, BookingStatus.CANCELLED}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid booking status")
 
     if booking_in.appointment_time is not None:
@@ -114,7 +115,7 @@ def delete_booking(booking_id: int, request: Request, db: Session = Depends(get_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     _authorize_booking(booking, current_user)
 
-    if current_user.role == "tenant" and booking.status != "pending":
+    if current_user.role == "tenant" and booking.status != BookingStatus.PENDING:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending bookings can be deleted")
 
     db.delete(booking)

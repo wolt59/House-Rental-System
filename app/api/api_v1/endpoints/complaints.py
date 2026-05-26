@@ -7,6 +7,7 @@ from app.crud import crud_audit, crud_complaint
 from app.models.complaint import Complaint
 from app.models.property import Property
 from app.schemas.complaint import Complaint as ComplaintSchema, ComplaintCreate, ComplaintUpdate
+from app.core.enums import ComplaintStatus
 
 router = APIRouter()
 
@@ -77,14 +78,14 @@ def update_complaint(complaint_id: int, complaint_in: ComplaintUpdate, request: 
     _authorize_complaint(complaint, current_user)
 
     if current_user.role == "tenant":
-        if complaint.status != "open":
+        if complaint.status != ComplaintStatus.OPEN:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only open complaints may be updated by tenant")
-        if complaint_in.status and complaint_in.status != "open":
+        if complaint_in.status and complaint_in.status != ComplaintStatus.OPEN:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant cannot change complaint status")
         if complaint_in.handled_by is not None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant cannot assign handlers")
     else:
-        if complaint_in.status and complaint_in.status not in {"open", "in_progress", "resolved", "closed"}:
+        if complaint_in.status and complaint_in.status not in {ComplaintStatus.OPEN, ComplaintStatus.IN_PROGRESS, ComplaintStatus.RESOLVED, ComplaintStatus.CLOSED}:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid complaint status")
 
     updated = crud_complaint.update_complaint(db, complaint, complaint_in)

@@ -13,6 +13,7 @@ from app.models.booking import Booking
 from app.models.maintenance import MaintenanceRequest
 from app.models.complaint import Complaint
 from app.schemas.property import RegionStats, FloorPlanStats
+from app.core.enums import PropertyReviewStatus, PropertyStatus, ContractStatus, PaymentStatus, BookingStatus, MaintenanceStatus, ComplaintStatus
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ router = APIRouter()
 def search_by_region(db: Session = Depends(get_db)):
     results = (
         db.query(Property.region, func.count(Property.id).label("property_count"))
-        .filter(Property.review_status == "approved", Property.region.isnot(None))
+        .filter(Property.review_status == PropertyReviewStatus.APPROVED, Property.region.isnot(None))
         .group_by(Property.region)
         .order_by(func.count(Property.id).desc())
         .all()
@@ -33,7 +34,7 @@ def search_by_region(db: Session = Depends(get_db)):
 def search_by_floor_plan(db: Session = Depends(get_db)):
     results = (
         db.query(Property.floor_plan, func.count(Property.id).label("property_count"))
-        .filter(Property.review_status == "approved", Property.floor_plan.isnot(None))
+        .filter(Property.review_status == PropertyReviewStatus.APPROVED, Property.floor_plan.isnot(None))
         .group_by(Property.floor_plan)
         .order_by(func.count(Property.id).desc())
         .all()
@@ -45,19 +46,19 @@ def search_by_floor_plan(db: Session = Depends(get_db)):
 def admin_dashboard(db: Session = Depends(get_db), current_user=Depends(get_current_active_admin)):
     total_users = db.query(func.count(User.id)).scalar()
     total_properties = db.query(func.count(Property.id)).scalar()
-    approved_properties = db.query(func.count(Property.id)).filter(Property.review_status == "approved").scalar()
-    vacant_properties = db.query(func.count(Property.id)).filter(Property.status == "vacant").scalar()
-    rented_properties = db.query(func.count(Property.id)).filter(Property.status == "rented").scalar()
+    approved_properties = db.query(func.count(Property.id)).filter(Property.review_status == PropertyReviewStatus.APPROVED).scalar()
+    vacant_properties = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.VACANT).scalar()
+    rented_properties = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.RENTED).scalar()
     total_contracts = db.query(func.count(Contract.id)).scalar()
-    active_contracts = db.query(func.count(Contract.id)).filter(Contract.status == "active").scalar()
+    active_contracts = db.query(func.count(Contract.id)).filter(Contract.status == ContractStatus.ACTIVE).scalar()
     total_payments = db.query(func.count(Payment.id)).scalar()
-    paid_payments = db.query(func.count(Payment.id)).filter(Payment.status == "paid").scalar()
-    pending_payments = db.query(func.count(Payment.id)).filter(Payment.status == "pending").scalar()
-    total_rent_income = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(Payment.status == "paid").scalar()
+    paid_payments = db.query(func.count(Payment.id)).filter(Payment.status == PaymentStatus.PAID).scalar()
+    pending_payments = db.query(func.count(Payment.id)).filter(Payment.status == PaymentStatus.PENDING).scalar()
+    total_rent_income = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(Payment.status == PaymentStatus.PAID).scalar()
     total_bookings = db.query(func.count(Booking.id)).scalar()
-    pending_bookings = db.query(func.count(Booking.id)).filter(Booking.status == "pending").scalar()
-    open_maintenance = db.query(func.count(MaintenanceRequest.id)).filter(MaintenanceRequest.status == "new").scalar()
-    open_complaints = db.query(func.count(Complaint.id)).filter(Complaint.status == "open").scalar()
+    pending_bookings = db.query(func.count(Booking.id)).filter(Booking.status == BookingStatus.PENDING).scalar()
+    open_maintenance = db.query(func.count(MaintenanceRequest.id)).filter(MaintenanceRequest.status == MaintenanceStatus.NEW).scalar()
+    open_complaints = db.query(func.count(Complaint.id)).filter(Complaint.status == ComplaintStatus.OPEN).scalar()
     occupancy_rate = round(rented_properties / approved_properties * 100, 1) if approved_properties > 0 else 0
 
     return {
@@ -135,10 +136,10 @@ def get_user_activity(db: Session = Depends(get_db), current_user=Depends(get_cu
 def get_property_status(db: Session = Depends(get_db), current_user=Depends(get_current_active_admin)):
     """获取房源状态分布"""
     total = db.query(func.count(Property.id)).scalar()
-    vacant = db.query(func.count(Property.id)).filter(Property.status == "vacant").scalar()
-    rented = db.query(func.count(Property.id)).filter(Property.status == "rented").scalar()
-    maintenance = db.query(func.count(Property.id)).filter(Property.status == "maintenance").scalar()
-    pending = db.query(func.count(Property.id)).filter(Property.review_status == "pending").scalar()
+    vacant = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.VACANT).scalar()
+    rented = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.RENTED).scalar()
+    maintenance = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.MAINTENANCE).scalar()
+    pending = db.query(func.count(Property.id)).filter(Property.review_status == PropertyReviewStatus.PENDING).scalar()
 
     return {
         "total": total,

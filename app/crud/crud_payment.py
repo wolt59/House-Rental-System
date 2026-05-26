@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.payment import Payment
 from app.schemas.payment import PaymentCreate, PaymentUpdate
+from app.core.enums import PaymentStatus
 
 
 def _generate_payment_no() -> str:
@@ -41,7 +42,7 @@ def create_payment(db: Session, tenant_id: int, payment_in: PaymentCreate) -> Pa
         payment_method=payment_in.payment_method,
         due_date=payment_in.due_date,
         remark=payment_in.remark,
-        status="pending",
+        status=PaymentStatus.PENDING,
     )
     db.add(payment)
     db.commit()
@@ -51,7 +52,7 @@ def create_payment(db: Session, tenant_id: int, payment_in: PaymentCreate) -> Pa
 
 def update_payment(db: Session, db_payment: Payment, payment_in: PaymentUpdate) -> Payment:
     update_data = payment_in.dict(exclude_unset=True)
-    if payment_in.status == "paid" and db_payment.status != "paid":
+    if payment_in.status == PaymentStatus.PAID and db_payment.status != PaymentStatus.PAID:
         update_data["paid_at"] = datetime.utcnow()
     for field, value in update_data.items():
         setattr(db_payment, field, value)
