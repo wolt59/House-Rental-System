@@ -1,12 +1,14 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from typing import List, Optional
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_active_landlord, get_current_active_user, get_current_active_admin, get_db
-from app.crud import crud_audit
+from app.crud import crud_audit, crud_booking
 from app.models.booking import Booking
 from app.models.property import Property
-from app.schemas.booking import BookingCreate, Booking as BookingSchema, BookingUpdate
+from app.models.user import User
+from app.schemas.booking import BookingCreate, Booking as BookingSchema, BookingUpdate, BookingReschedule, BookingRescheduleResponse
 from app.core.enums import BookingStatus
 
 router = APIRouter()
@@ -26,18 +28,20 @@ def _authorize_booking(booking: Booking, current_user):
 
 @router.post("/", response_model=BookingSchema, status_code=status.HTTP_201_CREATED)
 def create_booking(booking_in: BookingCreate, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+    if current_user.role != "tenant":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only tenants can create bookings")
+
     property_obj = db.query(Property).filter(Property.id == booking_in.property_id).first()
     if not property_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
-    booking = Booking(
-        tenant_id=current_user.id,
-        property_id=booking_in.property_id,
-        appointment_time=booking_in.appointment_time,
-        note=booking_in.note,
-    )
-    db.add(booking)
-    db.commit()
-    db.refresh(booking)
+
+    # 修复时区比较问题：将前端时间转换为UTC时间（去除时区信息）
+    appointment_utc = booking_in.appointment_time.replace(tzinfo=None) if booking_in.appointment_time.tzinfo else booking_in.appointment_time
+    if appointment_utc < datetime.utcnow():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot book in the past")
+
+    booking = crud_booking.create_booking(db, tenant_id=current_user.id, booking_in=booking_in)
+
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
@@ -51,19 +55,41 @@ def create_booking(booking_in: BookingCreate, request: Request, db: Session = De
     return booking
 
 
+
 @router.get("/", response_model=List[BookingSchema])
-def list_bookings(db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
-    query = db.query(Booking)
+def list_bookings(
+        db: Session = Depends(get_db),
+        current_user=Depends(get_current_active_user),
+        status: Optional[str] = Query(None),
+        skip: int = Query(0),
+        limit: int = Query(20)
+):
+    query = db.query(Booking).options(
+        joinedload(Booking.tenant),
+        joinedload(Booking.property).joinedload(Property.owner)
+    )
     if current_user.role == "tenant":
         query = query.filter(Booking.tenant_id == current_user.id)
     elif current_user.role == "landlord":
         query = query.join(Property).filter(Property.owner_id == current_user.id)
-    return query.all()
+
+    if status:
+        # 支持逗号分隔的多个状态值
+        status_list = [s.strip() for s in status.split(',')]
+        if len(status_list) == 1:
+            query = query.filter(Booking.status == status_list[0])
+        else:
+            query = query.filter(Booking.status.in_(status_list))
+
+    return query.offset(skip).limit(limit).all()
 
 
 @router.get("/{booking_id}", response_model=BookingSchema)
 def read_booking(booking_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    booking = db.query(Booking).options(
+        joinedload(Booking.tenant),
+        joinedload(Booking.property).joinedload(Property.owner)
+    ).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     _authorize_booking(booking, current_user)
@@ -78,33 +104,187 @@ def update_booking(booking_id: int, booking_in: BookingUpdate, request: Request,
     _authorize_booking(booking, current_user)
 
     if current_user.role == "tenant":
-        if booking.status != BookingStatus.PENDING:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending bookings can be updated")
-        if booking_in.status and booking_in.status != BookingStatus.CANCELLED:
+        if booking.status not in [BookingStatus.PENDING, BookingStatus.NEGOTIATING]:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot update this booking")
+        if booking_in.status and booking_in.status not in [BookingStatus.CANCELLED]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant may only cancel the booking")
     else:
-        if booking_in.status and booking_in.status not in {BookingStatus.APPROVED, BookingStatus.REJECTED, BookingStatus.CANCELLED}:
+        if booking_in.status and booking_in.status not in [BookingStatus.APPROVED, BookingStatus.REJECTED, BookingStatus.CANCELLED, BookingStatus.COMPLETED]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid booking status")
 
-    if booking_in.appointment_time is not None:
-        booking.appointment_time = booking_in.appointment_time
-    if booking_in.note is not None:
-        booking.note = booking_in.note
-    if booking_in.status is not None:
-        booking.status = booking_in.status
-
-    db.commit()
-    db.refresh(booking)
+    updated = crud_booking.update_booking(db, booking, booking_in)
+    
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
         action="update_booking",
         target_type="booking",
-        target_id=booking.id,
-        detail=f"Booking updated, status={booking.status}",
+        target_id=updated.id,
+        detail=f"Booking updated, status={updated.status}",
         ip_address=ip_address,
     )
+    return updated
+
+
+@router.post("/{booking_id}/approve", response_model=BookingSchema)
+def approve_booking(booking_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    _authorize_booking(booking, current_user)
+    
+    if booking.status != BookingStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending bookings can be approved")
+    
+    updated = crud_booking.approve_booking(db, booking)
+    
+    ip_address = request.client.host if request.client else None
+    crud_audit.create_audit_log(
+        db,
+        user_id=current_user.id,
+        action="approve_booking",
+        target_type="booking",
+        target_id=updated.id,
+        detail="Booking approved",
+        ip_address=ip_address,
+    )
+    return updated
+
+
+@router.post("/{booking_id}/reject", response_model=BookingSchema)
+def reject_booking(booking_id: int, reason: str, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    _authorize_booking(booking, current_user)
+    
+    if booking.status != BookingStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending bookings can be rejected")
+    
+    if not reason or len(reason.strip()) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reject reason is required")
+    
+    updated = crud_booking.reject_booking(db, booking, reason)
+    
+    ip_address = request.client.host if request.client else None
+    crud_audit.create_audit_log(
+        db,
+        user_id=current_user.id,
+        action="reject_booking",
+        target_type="booking",
+        target_id=updated.id,
+        detail=f"Booking rejected: {reason}",
+        ip_address=ip_address,
+    )
+    return updated
+
+
+@router.post("/{booking_id}/reschedule", response_model=BookingSchema)
+def reschedule_booking(booking_id: int, reschedule: BookingReschedule, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    _authorize_booking(booking, current_user)
+    
+    if booking.status not in [BookingStatus.PENDING, BookingStatus.APPROVED]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot reschedule this booking")
+    
+    updated = crud_booking.propose_reschedule(db, booking, reschedule.appointment_time, reschedule.message)
+    
+    ip_address = request.client.host if request.client else None
+    crud_audit.create_audit_log(
+        db,
+        user_id=current_user.id,
+        action="reschedule_booking",
+        target_type="booking",
+        target_id=updated.id,
+        detail=f"Booking reschedule proposed: {reschedule.message}",
+        ip_address=ip_address,
+    )
+    return updated
+
+
+@router.post("/{booking_id}/reschedule-response", response_model=BookingSchema)
+def respond_reschedule(booking_id: int, response: BookingRescheduleResponse, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    _authorize_booking(booking, current_user)
+    
+    if booking.status != BookingStatus.NEGOTIATING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No pending reschedule request")
+    
+    if response.response == "accept":
+        booking.status = BookingStatus.APPROVED
+        booking.reschedule_response = "accepted"
+        booking.confirmed_at = datetime.utcnow()
+    elif response.response == "reject":
+        booking.status = BookingStatus.PENDING
+        booking.reschedule_response = "rejected"
+        booking.reschedule_proposal = None
+    elif response.response == "cancel":
+        booking.status = BookingStatus.CANCELLED
+        booking.reschedule_response = "cancelled"
+        booking.cancel_reason = response.message or "Cancelled during negotiation"
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid response")
+    
+    db.commit()
+    db.refresh(booking)
+    
+    ip_address = request.client.host if request.client else None
+    crud_audit.create_audit_log(
+        db,
+        user_id=current_user.id,
+        action="respond_reschedule",
+        target_type="booking",
+        target_id=booking.id,
+        detail=f"Reschedule response: {response.response}",
+        ip_address=ip_address,
+    )
+    return booking
+
+
+@router.post("/{booking_id}/complete", response_model=BookingSchema)
+def complete_booking(booking_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    _authorize_booking(booking, current_user)
+    
+    if booking.status != BookingStatus.APPROVED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only approved bookings can be completed")
+    
+    updated = crud_booking.complete_booking(db, booking)
+    
+    ip_address = request.client.host if request.client else None
+    crud_audit.create_audit_log(
+        db,
+        user_id=current_user.id,
+        action="complete_booking",
+        target_type="booking",
+        target_id=updated.id,
+        detail="Booking marked as completed",
+        ip_address=ip_address,
+    )
+    return updated
+
+
+@router.post("/{booking_id}/show-contact", response_model=BookingSchema)
+def show_contact_info(booking_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    _authorize_booking(booking, current_user)
+    
+    if booking.status != BookingStatus.APPROVED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Contact info only available for approved bookings")
+    
+    booking.landlord_contact_shown = 1
+    db.commit()
+    db.refresh(booking)
+    
     return booking
 
 
@@ -115,8 +295,8 @@ def delete_booking(booking_id: int, request: Request, db: Session = Depends(get_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     _authorize_booking(booking, current_user)
 
-    if current_user.role == "tenant" and booking.status != BookingStatus.PENDING:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending bookings can be deleted")
+    if current_user.role == "tenant" and booking.status not in [BookingStatus.PENDING, BookingStatus.CANCELLED, BookingStatus.REJECTED]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete this booking")
 
     db.delete(booking)
     db.commit()

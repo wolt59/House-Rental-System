@@ -19,3 +19,27 @@ export function updateBooking(id, data) {
 export function deleteBooking(id) {
   return request.delete(`/api/v1/bookings/${id}`)
 }
+
+export function approveBooking(id) {
+  return request.post(`/api/v1/bookings/${id}/approve`)
+}
+
+export function rejectBooking(id, reason) {
+  return request.post(`/api/v1/bookings/${id}/reject`, null, { params: { reason } })
+}
+
+export function rescheduleBooking(id, data) {
+  return request.post(`/api/v1/bookings/${id}/reschedule`, data)
+}
+
+export function respondReschedule(id, data) {
+  return request.post(`/api/v1/bookings/${id}/reschedule-response`, data)
+}
+
+export function completeBooking(id) {
+  return request.post(`/api/v1/bookings/${id}/complete`)
+}
+
+export function showContactInfo(id) {
+  return request.post(`/api/v1/bookings/${id}/show-contact`)
+}

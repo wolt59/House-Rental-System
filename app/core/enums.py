@@ -30,9 +30,11 @@ class PaymentStatus(str, Enum):
 class BookingStatus(str, Enum):
     """预约状态枚举"""
     PENDING = "pending"  # 待确认
-    APPROVED = "approved"  # 已确认
+    APPROVED = "approved"  # 已同意
     REJECTED = "rejected"  # 已拒绝
     CANCELLED = "cancelled"  # 已取消
+    NEGOTIATING = "negotiating"  # 待协商（房东提出改期）
+    COMPLETED = "completed"  # 看房完成
 
 
 class MaintenanceStatus(str, Enum):

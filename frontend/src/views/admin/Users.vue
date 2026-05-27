@@ -10,25 +10,25 @@
         </el-select>
       </el-form-item>
     </el-form>
-    <el-table :data="users" stripe v-loading="loading">
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="username" label="用户名" width="120" />
-      <el-table-column prop="email" label="邮箱" width="200" />
+    <el-table :data="users" stripe v-loading="loading" style="width: 100%">
+      <el-table-column prop="id" label="ID" width="80" />
+      <el-table-column prop="username" label="用户名" width="140" />
+      <el-table-column prop="email" label="邮箱" min-width="220" />
       <el-table-column prop="full_name" label="姓名" width="120" />
       <el-table-column label="角色" width="100">
         <template #default="{ row }">
           <el-tag :type="roleType(row.role)" size="small">{{ roleLabel(row.role) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="80">
+      <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.is_active ? 'success' : 'danger'" size="small">{{ row.is_active ? '正常' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="注册时间" width="170">
+      <el-table-column label="注册时间" width="180">
         <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="200">
+      <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
           <el-button :type="row.is_active ? 'danger' : 'success'" size="small" @click="handleToggleStatus(row)">
@@ -43,12 +43,18 @@
       <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
     </div>
 
-    <el-dialog v-model="editVisible" title="编辑用户" width="500px">
-      <el-form ref="formRef" :model="editForm" label-width="80px" :rules="userRules">
-        <el-form-item label="手机号"><el-input v-model="editForm.phone" /></el-form-item>
-        <el-form-item label="姓名"><el-input v-model="editForm.full_name" /></el-form-item>
+    <el-dialog v-model="editVisible" title="编辑用户" width="600px">
+      <el-form ref="formRef" :model="editForm" label-width="90px" :rules="userRules">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="手机号"><el-input v-model="editForm.phone" /></el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="姓名"><el-input v-model="editForm.full_name" /></el-form-item>
+          </el-col>
+        </el-row>
         <el-form-item label="角色">
-          <el-select v-model="editForm.role">
+          <el-select v-model="editForm.role" style="width: 100%">
             <el-option label="租客" value="tenant" />
             <el-option label="房东" value="landlord" />
             <el-option label="管理员" value="admin" />
@@ -60,8 +66,10 @@
         <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
       </template>
     </el-dialog>
+
   </div>
 </template>
+
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'

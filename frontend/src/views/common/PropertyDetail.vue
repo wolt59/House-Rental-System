@@ -59,13 +59,24 @@
       </el-col>
     </el-row>
 
-    <el-dialog v-model="showBookingDialog" title="预约看房" width="480px">
-      <el-form ref="bookingFormRef" :model="bookingForm" label-width="80px" :rules="bookingRules">
-        <el-form-item label="预约时间" prop="appointment_time">
-          <el-date-picker v-model="bookingForm.appointment_time" type="datetime" placeholder="选择时间" style="width: 100%" :disabled-date="d => d.getTime() < Date.now() - 86400000" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="bookingForm.note" type="textarea" :rows="3" />
+    <el-dialog v-model="showBookingDialog" title="预约看房" width="600px">
+      <el-form ref="bookingFormRef" :model="bookingForm" label-width="90px" :rules="bookingRules">
+        <el-row :gutter="16">
+          <el-col :span="24">
+            <el-form-item label="预约时间" prop="appointment_time">
+              <el-date-picker 
+                v-model="bookingForm.appointment_time" 
+                type="datetime" 
+                placeholder="选择日期和时间" 
+                style="width: 100%" 
+                :disabled-date="d => d.getTime() < Date.now() - 86400000" 
+                :default-time="new Date(2000, 1, 1, 10, 0, 0)"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="补充留言">
+          <el-input v-model="bookingForm.note" type="textarea" :rows="3" placeholder="如有特殊需求请备注" />
         </el-form-item>
       </el-form>
       <template #footer>

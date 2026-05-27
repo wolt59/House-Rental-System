@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -14,8 +14,13 @@ class Booking(Base):
     appointment_time = Column(DateTime, nullable=False)
     status = Column(String(50), default="pending")
     cancel_reason = Column(String(500), nullable=True)
+    reject_reason = Column(String(500), nullable=True)
+    reschedule_proposal = Column(Text, nullable=True)
+    reschedule_response = Column(String(50), nullable=True)
     confirmed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
     note = Column(String(500), nullable=True)
+    landlord_contact_shown = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
