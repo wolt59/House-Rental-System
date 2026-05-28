@@ -144,6 +144,17 @@ def read_property(property_id: int, db: Session = Depends(get_db), current_user=
         and (not current_user or current_user.role != "admin")
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+    
+    # 增加浏览量
+    try:
+        db_property.view_count = (db_property.view_count or 0) + 1
+        db.commit()
+        db.refresh(db_property)
+    except Exception:
+        db.rollback()
+        # 如果增加浏览量失败，不阻断用户查看房源
+        pass
+    
     return db_property
 
 
