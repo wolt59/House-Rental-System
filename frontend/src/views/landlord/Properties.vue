@@ -27,8 +27,10 @@
           <el-button size="small" @click="manageImages(row)">图片</el-button>
           <el-button v-if="row.review_status === 'draft' || row.review_status === 'rejected'" 
                      type="primary" size="small" @click="handleSubmitReview(row)">提交审核</el-button>
+          <el-button v-if="row.review_status === 'pending' || row.review_status === 'reviewing'" 
+                     type="warning" size="small" @click="handleWithdrawReview(row)">撤销审核</el-button>
           <el-button v-if="row.review_status === 'approved' && row.status === 'published'" 
-                     size="small" @click="handleUnpublish(row)">取消发布</el-button>
+                     type="warning" size="small" @click="handleUnpublish(row)">取消发布</el-button>
           <el-button v-if="row.review_status === 'approved' && row.status === 'unpublished'" 
                      type="success" size="small" @click="handleRepublish(row)">发布</el-button>
           <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
@@ -62,7 +64,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getMyProperties, deleteProperty, submitForReview, unpublishProperty, republishProperty, getPropertyImages, addPropertyImage, updatePropertyImage, deletePropertyImage, uploadFile } from '../../api/property'
+import { getMyProperties, deleteProperty, submitForReview, withdrawReview, unpublishProperty, republishProperty, getPropertyImages, addPropertyImage, updatePropertyImage, deletePropertyImage, uploadFile } from '../../api/property'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
@@ -88,7 +90,9 @@ async function loadData() {
     const res = await getMyProperties({ limit: 50 })
     properties.value = Array.isArray(res) ? res : []
   } catch (e) {
-    ElMessage.error('加载房源列表失败')
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error('加载房源列表失败')
+    }
   } finally {
     loading.value = false
   }
@@ -101,18 +105,45 @@ async function handleSubmitReview(row) {
     ElMessage.success('已提交审核')
     loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '提交失败')
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error(e.response?.data?.detail || '提交失败')
+    }
+  }
+}
+
+// 撤销审核
+async function handleWithdrawReview(row) {
+  try {
+    await ElMessageBox.confirm('确定撤销审核申请？撤销后房源将变回草稿状态，可修改后重新提交。', '确认撤销', {
+      type: 'warning',
+      confirmButtonText: '确认撤销',
+      cancelButtonText: '取消'
+    })
+    await withdrawReview(row.id)
+    ElMessage.success('已撤销审核申请')
+    loadData()
+  } catch (e) {
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error(e.response?.data?.detail || '操作失败')
+    }
   }
 }
 
 // 取消发布
 async function handleUnpublish(row) {
   try {
+    await ElMessageBox.confirm('确定取消发布？取消后房源将变回未发布状态，可修改后重新发布。', '确认取消', {
+      type: 'warning',
+      confirmButtonText: '确认取消',
+      cancelButtonText: '取消'
+    })
     await unpublishProperty(row.id)
     ElMessage.success('已取消发布')
     loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '操作失败')
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error(e.response?.data?.detail || '操作失败')
+    }
   }
 }
 
@@ -123,7 +154,9 @@ async function handleRepublish(row) {
     ElMessage.success('已发布')
     loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '操作失败')
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error(e.response?.data?.detail || '操作失败')
+    }
   }
 }
 
@@ -133,7 +166,9 @@ async function manageImages(row) {
     const res = await getPropertyImages(row.id)
     images.value = Array.isArray(res) ? res : []
   } catch (e) {
-    ElMessage.error('图片管理加载失败')
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error('加载图片管理失败')
+    }
   }
   imageDialogVisible.value = true
 }
@@ -145,7 +180,9 @@ async function handleImageUpload(file) {
     ElMessage.success('上传成功')
     manageImages({ id: currentPropertyId.value })
   } catch (e) {
-    ElMessage.error('图片上传失败')
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error('图片上传失败')
+    }
   }
   return false
 }
@@ -156,7 +193,9 @@ async function setCover(img) {
     ElMessage.success('已设为封面')
     manageImages({ id: currentPropertyId.value })
   } catch (e) {
-    ElMessage.error('设置封面失败')
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error('设置封面失败')
+    }
   }
 }
 

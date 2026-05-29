@@ -40,6 +40,10 @@ export function submitForReview(id) {
   return request.post(`/api/v1/properties/${id}/submit-review`)
 }
 
+export function withdrawReview(id) {
+  return request.post(`/api/v1/properties/${id}/withdraw-review`)
+}
+
 export function unpublishProperty(id) {
   return request.post(`/api/v1/properties/${id}/unpublish`)
 }

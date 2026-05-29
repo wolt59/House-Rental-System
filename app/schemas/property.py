@@ -192,16 +192,6 @@ class PropertyStatusUpdate(BaseModel):
     status: str
 
 
-class PropertySubmitForReview(BaseModel):
-    """提交审核请求"""
-    pass
-
-
-class PropertyRepublish(BaseModel):
-    """重新发布请求"""
-    pass
-
-
 class RegionStats(BaseModel):
     region: str
     property_count: int

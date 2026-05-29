@@ -180,7 +180,7 @@ def update_property(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     
     # 获取要更新的字段
-    update_data = property_in.dict(exclude_unset=True)
+    update_data = property_in.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
     
@@ -226,14 +226,22 @@ def update_property(
         # 被拒绝：可以自由修改，准备重新提交
         pass
     
-    # 在权限检查之前，将系统自动的 review_status 修改加入 update_data
+    # 在权限检查之前，将系统自动的 review_status 和 status 修改加入 update_data
     if needs_review_status_change:
         update_data["review_status"] = PropertyReviewStatus.PENDING.value
+        update_data["status"] = PropertyStatus.UNPUBLISHED.value
         update_data["submitted_at"] = datetime.utcnow()
+        update_data["unpublished_at"] = datetime.utcnow()
+        update_data["approved_at"] = None
+        update_data["published_at"] = None
     
     # 房东不能手动修改审核状态（系统自动修改的除外）
     if "review_status" in modified_fields and current_user.role != "admin" and not needs_review_status_change:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can update review status")
+    
+    # 房东不能通过更新接口直接修改房源运营状态（需使用专用端点）
+    if "status" in modified_fields and current_user.role != "admin" and not needs_review_status_change:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot update status directly. Use the status change endpoint instead.")
     
     # 使用 update_data 而不是 property_in，因为 update_data 包含了系统自动添加的字段
     for field, value in update_data.items():
@@ -406,6 +414,33 @@ def submit_for_review(property_id: int, request: Request, db: Session = Depends(
     return updated
 
 
+@router.post("/{property_id}/withdraw-review", response_model=Property)
+def withdraw_review(property_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+    """房东撤销审核申请（在未审核通过前可撤回，变回草稿状态）"""
+    db_property = crud_property.get_property(db, property_id=property_id)
+    if not db_property:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+    if db_property.owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    try:
+        updated = crud_property.withdraw_review(db, db_property)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    ip_address = request.client.host if request.client else None
+    crud_audit.create_audit_log(
+        db,
+        user_id=current_user.id,
+        action="withdraw_review",
+        target_type="property",
+        target_id=updated.id,
+        detail="Property review withdrawn by landlord, back to draft",
+        ip_address=ip_address,
+    )
+    return updated
+
+
 @router.post("/{property_id}/unpublish", response_model=Property)
 def unpublish_property(
     property_id: int,
@@ -479,37 +514,6 @@ def republish_property(
         target_type="property",
         target_id=updated.id,
         detail="Property republished",
-        ip_address=ip_address,
-    )
-    return updated
-
-
-@router.put("/{property_id}/admin-unpublish", response_model=Property)
-def admin_unpublish_property(
-    property_id: int,
-    reason: Optional[str] = None,
-    request: Request = None,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_active_admin),
-):
-    """管理员强制下架房源"""
-    db_property = crud_property.get_property(db, property_id=property_id)
-    if not db_property:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
-    
-    try:
-        updated = crud_property.admin_unpublish_property(db, db_property, reason)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    
-    ip_address = request.client.host if request.client else None
-    crud_audit.create_audit_log(
-        db,
-        user_id=current_user.id,
-        action="admin_unpublish_property",
-        target_type="property",
-        target_id=updated.id,
-        detail=f"Property unpublished by admin. Reason: {reason or 'Not specified'}",
         ip_address=ip_address,
     )
     return updated

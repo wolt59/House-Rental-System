@@ -353,8 +353,8 @@ const defaultForm = {
 
 const form = reactive({ ...defaultForm })
 
-// 核心字段定义（修改需重新审核）
-const CORE_FIELDS = ['address', 'city', 'region', 'community_name', 'building_area', 'rent', 'deposit', 'floor_number', 'total_floors']
+// 核心字段定义（与后端一致，修改需重新审核）
+const CORE_FIELDS = ['address', 'floor_plan', 'area', 'rent', 'deposit', 'floor_number', 'total_floors']
 
 // 加载房源数据（编辑模式）
 onMounted(async () => {
@@ -381,7 +381,7 @@ function isFieldDisabled(field) {
   }
   
   if (reviewStatus === 'pending' || reviewStatus === 'reviewing') {
-    return field !== 'description' && field !== 'surrounding'
+    return field !== 'description' && field !== 'video_url' && field !== 'facilities' && field !== 'surrounding'
   }
   
   if (reviewStatus === 'draft' || reviewStatus === 'rejected') {
@@ -401,7 +401,7 @@ function getEditRestrictionTip(property) {
   }
   
   if (reviewStatus === 'pending' || reviewStatus === 'reviewing') {
-    return '审核中的房源仅允许修改描述和周边环境信息'
+    return '审核中的房源仅允许修改描述、视频、设施和周边环境信息'
   }
   
   if (reviewStatus === 'approved' && (status === 'published' || status === 'unpublished')) {
