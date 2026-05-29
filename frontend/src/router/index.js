@@ -42,6 +42,8 @@ const routes = [
         children: [
           { path: 'dashboard', name: 'LandlordDashboard', component: () => import('../views/landlord/Dashboard.vue') },
           { path: 'properties', name: 'LandlordProperties', component: () => import('../views/landlord/Properties.vue') },
+          { path: 'property/create', name: 'PropertyCreate', component: () => import('../views/landlord/PropertyForm.vue') },
+          { path: 'property/:id/edit', name: 'PropertyEdit', component: () => import('../views/landlord/PropertyForm.vue') },
           { path: 'bookings', name: 'LandlordBookings', component: () => import('../views/landlord/Bookings.vue') },
           { path: 'contracts', name: 'LandlordContracts', component: () => import('../views/landlord/Contracts.vue') },
           { path: 'payments', name: 'LandlordPayments', component: () => import('../views/landlord/Payments.vue') },
