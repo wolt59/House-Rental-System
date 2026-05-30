@@ -89,6 +89,12 @@ REJECTABLE_STATUSES = [
     ContractStatus.PENDING_TENANT_SIGN,
 ]
 
+class MessageType(str, Enum):
+    TEXT = "text"
+    SYSTEM = "system"
+    NOTIFICATION = "notification"
+
+
 # 活跃/进行中的合同状态（占用房源）
 ACTIVE_OR_PENDING_STATUSES = [
     ContractStatus.DRAFT,

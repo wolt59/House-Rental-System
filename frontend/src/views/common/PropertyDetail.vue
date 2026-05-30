@@ -254,7 +254,7 @@
               <el-icon class="btn-icon"><Calendar /></el-icon>
               <span>预约看房</span>
             </div>
-            <div class="action-btn action-btn-default" @click="showMessageDialog = true">
+            <div class="action-btn action-btn-default" @click="goToChat">
               <el-icon class="btn-icon"><ChatDotRound /></el-icon>
               <span>联系房东</span>
             </div>
@@ -289,44 +289,28 @@
         <el-button type="primary" :loading="bookingLoading" @click="handleBooking">确认预约</el-button>
       </template>
     </el-dialog>
-
-    <!-- 联系房东弹窗 -->
-    <el-dialog v-model="showMessageDialog" title="联系房东" width="600px">
-      <el-form :model="messageForm" label-width="90px">
-        <el-form-item label="消息内容">
-          <el-input v-model="messageForm.content" type="textarea" :rows="4" placeholder="请输入消息内容" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showMessageDialog = false">取消</el-button>
-        <el-button type="primary" :loading="msgLoading" @click="handleSendMessage">发送</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../../store/user'
 import { getProperty } from '../../api/property'
 import { createBooking } from '../../api/booking'
-import { sendMessage } from '../../api/message'
 import { ElMessage } from 'element-plus'
 import { Calendar, ChatDotRound } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const property = ref({})
 const loading = ref(false)
 const currentImage = ref('')
 const showBookingDialog = ref(false)
-const showMessageDialog = ref(false)
 const bookingLoading = ref(false)
-const msgLoading = ref(false)
 
 const bookingForm = ref({ appointment_time: '', note: '' })
-const messageForm = ref({ content: '' })
 const bookingFormRef = ref(null)
 
 const bookingRules = {
@@ -420,26 +404,12 @@ async function handleBooking() {
   }
 }
 
-async function handleSendMessage() {
-  if (!messageForm.value.content) {
-    ElMessage.warning('请输入消息内容')
+function goToChat() {
+  if (!userStore.isLoggedIn) {
+    router.push('/login')
     return
   }
-  msgLoading.value = true
-  try {
-    await sendMessage({
-      to_user_id: property.value.owner_id,
-      property_id: parseInt(route.params.id),
-      content: messageForm.value.content,
-    })
-    ElMessage.success('消息已发送')
-    showMessageDialog.value = false
-    messageForm.value = { content: '' }
-  } catch (e) {
-    ElMessage.error('发送消息失败')
-  } finally {
-    msgLoading.value = false
-  }
+  router.push({ path: '/messages', query: { with: property.value.owner_id } })
 }
 
 onMounted(loadData)

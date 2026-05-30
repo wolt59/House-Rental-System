@@ -2,14 +2,17 @@ from contextlib import asynccontextmanager
 import os
 import uuid
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, status
+from fastapi import FastAPI, UploadFile, File, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.api_v1.api import api_router
+from app.api.websocket import ws_manager
 from app.core.config import settings
+from app.core.security import decode_access_token
+from app.crud import crud_user
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import engine, SessionLocal
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(os.path.join(UPLOAD_DIR, "images"), exist_ok=True)
@@ -44,6 +47,40 @@ def create_app() -> FastAPI:
     app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
     app.include_router(api_router, prefix="/api/v1")
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket):
+        token = websocket.query_params.get("token")
+        if not token:
+            await websocket.close(code=4001, reason="Missing token")
+            return
+        try:
+            payload = decode_access_token(token)
+            user_id = payload.get("sub")
+            if not user_id:
+                await websocket.close(code=4001, reason="Invalid token")
+                return
+        except Exception:
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+
+        db = SessionLocal()
+        try:
+            user = crud_user.get_user(db, int(user_id))
+            if not user or not user.is_active:
+                await websocket.close(code=4001, reason="User inactive or not found")
+                return
+        finally:
+            db.close()
+
+        await ws_manager.connect(websocket, int(user_id))
+        try:
+            while True:
+                data = await websocket.receive_text()
+        except WebSocketDisconnect:
+            ws_manager.disconnect(websocket, int(user_id))
+        except Exception:
+            ws_manager.disconnect(websocket, int(user_id))
 
     @app.post("/api/v1/upload", tags=["upload"])
     async def upload_file(file: UploadFile = File(...)):

@@ -10,3 +10,4 @@ PyMySQL
 email-validator
 python-jose[cryptography]
 python-multipart
+websockets

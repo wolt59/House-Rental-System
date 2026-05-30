@@ -44,8 +44,8 @@ export function withdrawReview(id) {
   return request.post(`/api/v1/properties/${id}/withdraw-review`)
 }
 
-export function unpublishProperty(id) {
-  return request.post(`/api/v1/properties/${id}/unpublish`)
+export function unpublishProperty(id, data) {
+  return request.post(`/api/v1/properties/${id}/unpublish`, data)
 }
 
 export function republishProperty(id) {

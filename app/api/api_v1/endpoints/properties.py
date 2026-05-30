@@ -1,7 +1,7 @@
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
@@ -11,9 +11,11 @@ from app.api.deps import (
     get_current_user_optional,
     get_db,
 )
-from app.crud import crud_audit, crud_property
+from app.crud import crud_audit, crud_property, crud_message
 from app.models.message import Message as MessageModel
 from app.models.property import Property as PropertyModel
+from app.models.user import User
+from app.api.websocket import ws_manager
 from app.schemas.property import (
     Property,
     PropertyCreate,
@@ -162,6 +164,7 @@ def read_property(property_id: int, db: Session = Depends(get_db), current_user=
 def update_property(
     property_id: int,
     property_in: PropertyUpdate,
+    background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_landlord),
@@ -260,6 +263,41 @@ def update_property(
         detail=f"Updated property fields: {list(modified_fields)}",
         ip_address=ip_address,
     )
+
+    if needs_review_status_change:
+        admins = db.query(User).filter(User.role == "admin", User.is_active == True).all()
+        if admins:
+            notification_content = f"房东「{current_user.full_name or current_user.username}」修改了房源「{updated.title}」的核心信息，需要重新审核。"
+            admin_unread = {}
+            for admin in admins:
+                notification = MessageModel(
+                    from_user_id=current_user.id,
+                    to_user_id=admin.id,
+                    property_id=updated.id,
+                    content=notification_content,
+                    message_type="notification",
+                )
+                db.add(notification)
+                admin_unread[admin.id] = crud_message.get_unread_count(db, user_id=admin.id)
+
+            async def notify_admins():
+                for admin in admins:
+                    payload = {
+                        "type": "new_message",
+                        "message": {
+                            "from_user_id": current_user.id,
+                            "to_user_id": admin.id,
+                            "content": notification_content,
+                            "message_type": "notification",
+                            "property_id": updated.id,
+                            "is_read": False,
+                        },
+                        "unread_count": admin_unread.get(admin.id, 0) + 1,
+                    }
+                    await ws_manager.send_personal(payload, admin.id)
+
+            background_tasks.add_task(notify_admins)
+
     return updated
 
 
@@ -267,6 +305,7 @@ def update_property(
 def review_property(
     property_id: int,
     review_in: PropertyReview,
+    background_tasks: BackgroundTasks,
     request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_admin),
@@ -314,20 +353,49 @@ def review_property(
     )
     
     # 发送通知
+    review_status_cn = {
+        "approved": "已通过",
+        "rejected": "已拒绝",
+        "pending": "待审核",
+        "reviewing": "审核中",
+    }.get(updated.review_status, updated.review_status)
+
     notification_content = (
-        f"Your property '{updated.title}' review status is now '{updated.review_status}'. "
-        f"Comment: {review_in.comment or 'none'}."
+        f"您的房源「{updated.title}」审核状态已更新为「{review_status_cn}」。"
+        f"{'审核意见：' + review_in.comment if review_in.comment else ''}"
     )
     notification = MessageModel(
         from_user_id=current_user.id,
         to_user_id=updated.owner_id,
         property_id=updated.id,
         content=notification_content,
+        message_type="notification",
     )
     db.add(notification)
-    db.commit()
+    db.flush()
     db.refresh(notification)
-    
+
+    unread_before = crud_message.get_unread_count(db, user_id=updated.owner_id)
+
+    async def notify_owner():
+        payload = {
+            "type": "new_message",
+            "message": {
+                "id": notification.id,
+                "from_user_id": notification.from_user_id,
+                "to_user_id": notification.to_user_id,
+                "content": notification.content,
+                "message_type": notification.message_type,
+                "property_id": notification.property_id,
+                "is_read": notification.is_read,
+                "created_at": notification.created_at.isoformat() if notification.created_at else None,
+            },
+            "unread_count": unread_before + 1,
+        }
+        await ws_manager.send_personal(payload, notification.to_user_id)
+
+    background_tasks.add_task(notify_owner)
+
     return updated
 
 
@@ -388,19 +456,19 @@ def delete_property(property_id: int, request: Request, db: Session = Depends(ge
 
 
 @router.post("/{property_id}/submit-review", response_model=Property)
-def submit_for_review(property_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+def submit_for_review(property_id: int, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
     """房东提交房源审核"""
     db_property = crud_property.get_property(db, property_id=property_id)
     if not db_property:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
     if db_property.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    
+
     try:
         updated = crud_property.submit_for_review(db, db_property)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    
+
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
@@ -411,11 +479,45 @@ def submit_for_review(property_id: int, request: Request, db: Session = Depends(
         detail="Property submitted for review",
         ip_address=ip_address,
     )
+
+    admins = db.query(User).filter(User.role == "admin", User.is_active == True).all()
+    if admins:
+        notification_content = f"房东「{current_user.full_name or current_user.username}」提交了房源「{updated.title}」审核申请，请及时处理。"
+        admin_unread = {}
+        for admin in admins:
+            notification = MessageModel(
+                from_user_id=current_user.id,
+                to_user_id=admin.id,
+                property_id=updated.id,
+                content=notification_content,
+                message_type="notification",
+            )
+            db.add(notification)
+            admin_unread[admin.id] = crud_message.get_unread_count(db, user_id=admin.id)
+
+        async def notify_admins():
+            for admin in admins:
+                payload = {
+                    "type": "new_message",
+                    "message": {
+                        "from_user_id": current_user.id,
+                        "to_user_id": admin.id,
+                        "content": notification_content,
+                        "message_type": "notification",
+                        "property_id": updated.id,
+                        "is_read": False,
+                    },
+                    "unread_count": admin_unread.get(admin.id, 0) + 1,
+                }
+                await ws_manager.send_personal(payload, admin.id)
+
+        background_tasks.add_task(notify_admins)
+
     return updated
 
 
 @router.post("/{property_id}/withdraw-review", response_model=Property)
-def withdraw_review(property_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+def withdraw_review(property_id: int, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
     """房东撤销审核申请（在未审核通过前可撤回，变回草稿状态）"""
     db_property = crud_property.get_property(db, property_id=property_id)
     if not db_property:
@@ -438,12 +540,47 @@ def withdraw_review(property_id: int, request: Request, db: Session = Depends(ge
         detail="Property review withdrawn by landlord, back to draft",
         ip_address=ip_address,
     )
+
+    admins = db.query(User).filter(User.role == "admin", User.is_active == True).all()
+    if admins:
+        notification_content = f"房东「{current_user.full_name or current_user.username}」撤销了房源「{updated.title}」的审核申请。"
+        admin_unread = {}
+        for admin in admins:
+            notification = MessageModel(
+                from_user_id=current_user.id,
+                to_user_id=admin.id,
+                property_id=updated.id,
+                content=notification_content,
+                message_type="notification",
+            )
+            db.add(notification)
+            admin_unread[admin.id] = crud_message.get_unread_count(db, user_id=admin.id)
+
+        async def notify_admins():
+            for admin in admins:
+                payload = {
+                    "type": "new_message",
+                    "message": {
+                        "from_user_id": current_user.id,
+                        "to_user_id": admin.id,
+                        "content": notification_content,
+                        "message_type": "notification",
+                        "property_id": updated.id,
+                        "is_read": False,
+                    },
+                    "unread_count": admin_unread.get(admin.id, 0) + 1,
+                }
+                await ws_manager.send_personal(payload, admin.id)
+
+        background_tasks.add_task(notify_admins)
+
     return updated
 
 
 @router.post("/{property_id}/unpublish", response_model=Property)
 def unpublish_property(
     property_id: int,
+    background_tasks: BackgroundTasks,
     request: Request,
     data: Optional[dict] = None,
     db: Session = Depends(get_db),
@@ -454,17 +591,19 @@ def unpublish_property(
     if not db_property:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
     
+    is_admin_action = False
+    admin_reason = ""
     # 权限检查：房东只能操作自己的房源，管理员可以操作所有
     if current_user.role == "admin":
         reason = data.get("reason", "") if data else ""
-        # 管理员下架：同时变为待审核和未发布
+        is_admin_action = True
+        admin_reason = reason
         try:
             updated = crud_property.admin_unpublish_property(db, db_property, reason=reason)
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     elif db_property.owner_id == current_user.id:
         reason = "房东主动取消发布"
-        # 房东取消发布：只修改状态为未发布，不影响审核状态
         try:
             updated = crud_property.unpublish_property(db, db_property)
         except ValueError as e:
@@ -482,6 +621,37 @@ def unpublish_property(
         detail=f"Property unpublished: {reason}",
         ip_address=ip_address,
     )
+
+    if is_admin_action:
+        content = f"您的房源「{updated.title}」已被管理员下架。{'原因：' + admin_reason if admin_reason else ''}"
+        notification = MessageModel(
+            from_user_id=current_user.id,
+            to_user_id=updated.owner_id,
+            property_id=updated.id,
+            content=content,
+            message_type="notification",
+        )
+        db.add(notification)
+
+        unread_before = crud_message.get_unread_count(db, user_id=updated.owner_id)
+
+        async def notify_owner():
+            payload = {
+                "type": "new_message",
+                "message": {
+                    "from_user_id": current_user.id,
+                    "to_user_id": updated.owner_id,
+                    "content": content,
+                    "message_type": "notification",
+                    "property_id": updated.id,
+                    "is_read": False,
+                },
+                "unread_count": unread_before + 1,
+            }
+            await ws_manager.send_personal(payload, updated.owner_id)
+
+        background_tasks.add_task(notify_owner)
+
     return updated
 
 

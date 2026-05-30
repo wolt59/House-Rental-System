@@ -34,6 +34,7 @@ def _send_message_to_user(
     to_user_id: int,
     content: str,
     property_id: Optional[int] = None,
+    message_type: str = "notification",
 ) -> None:
     """发送系统消息给用户"""
     message = Message(
@@ -42,6 +43,7 @@ def _send_message_to_user(
         content=content,
         property_id=property_id,
         is_read=False,
+        message_type=message_type,
     )
     db.add(message)
 

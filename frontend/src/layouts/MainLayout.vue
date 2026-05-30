@@ -48,6 +48,16 @@
               <el-menu-item index="/admin/audit-logs">
                 <el-icon><Notebook /></el-icon><span>审计日志</span>
               </el-menu-item>
+              <el-menu-item index="/admin/messages">
+                <el-icon><ChatDotRound /></el-icon>
+                <span>消息中心</span>
+                <el-badge :value="chatUnread" :hidden="chatUnread === 0" :max="99" class="menu-badge" />
+              </el-menu-item>
+              <el-menu-item index="/admin/notifications">
+                <el-icon><Bell /></el-icon>
+                <span>通知中心</span>
+                <el-badge :value="notifUnread" :hidden="notifUnread === 0" :max="99" class="menu-badge" />
+              </el-menu-item>
             </template>
 
             <!-- 租客/房东 -->
@@ -66,7 +76,14 @@
                 <el-icon><Document /></el-icon><span>新闻资讯</span>
               </el-menu-item>
               <el-menu-item index="/messages">
-                <el-icon><ChatDotRound /></el-icon><span>消息中心</span>
+                <el-icon><ChatDotRound /></el-icon>
+                <span>消息中心</span>
+                <el-badge :value="chatUnread" :hidden="chatUnread === 0" :max="99" class="menu-badge" />
+              </el-menu-item>
+              <el-menu-item index="/notifications">
+                <el-icon><Bell /></el-icon>
+                <span>通知中心</span>
+                <el-badge :value="notifUnread" :hidden="notifUnread === 0" :max="99" class="menu-badge" />
               </el-menu-item>
 
               <template v-if="userStore.isTenant">
@@ -127,18 +144,48 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../store/user'
+import { getUnreadCount } from '../api/message'
 import {
   HomeFilled, OfficeBuilding, Search, Document, ChatDotRound,
   User, SwitchButton, DataAnalysis, UserFilled, Notebook,
-  Calendar, DocumentChecked, Money, Tools, WarningFilled,
+  Calendar, DocumentChecked, Money, Tools, WarningFilled, Bell,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const sidebarWidth = '220px'
+const chatUnread = ref(0)
+const notifUnread = ref(0)
+
+let unreadTimer = null
+
+async function fetchUnreadCount() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const [chatRes, notifRes] = await Promise.all([
+      getUnreadCount('chat'),
+      getUnreadCount('notification'),
+    ])
+    chatUnread.value = chatRes.total_unread || 0
+    notifUnread.value = notifRes.total_unread || 0
+  } catch (e) {
+    // silent
+  }
+}
+
+onMounted(() => {
+  fetchUnreadCount()
+  unreadTimer = setInterval(fetchUnreadCount, 30000)
+  window.addEventListener('unread-changed', fetchUnreadCount)
+})
+
+onBeforeUnmount(() => {
+  if (unreadTimer) clearInterval(unreadTimer)
+  window.removeEventListener('unread-changed', fetchUnreadCount)
+})
 
 const roleLabel = computed(() => {
   const map = { admin: '管理员', landlord: '房东', tenant: '租客' }
@@ -261,6 +308,15 @@ function handleCommand(cmd) {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+
+.menu-badge {
+  margin-left: auto;
+}
+
+.menu-badge :deep(.el-badge__content) {
+  position: static;
+  transform: none;
 }
 
 /* ===== Main Content ===== */

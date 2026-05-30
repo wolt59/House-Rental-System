@@ -1,15 +1,17 @@
 from typing import List, Optional
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_active_landlord, get_current_active_user, get_current_active_admin, get_db
-from app.crud import crud_audit, crud_booking
+from app.crud import crud_audit, crud_booking, crud_message
 from app.models.booking import Booking
+from app.models.message import Message as MessageModel
 from app.models.property import Property
 from app.models.user import User
 from app.schemas.booking import BookingCreate, Booking as BookingSchema, BookingUpdate, BookingReschedule, BookingRescheduleResponse
 from app.core.enums import BookingStatus
+from app.api.websocket import ws_manager
 
 router = APIRouter()
 
@@ -27,7 +29,7 @@ def _authorize_booking(booking: Booking, current_user):
 
 
 @router.post("/", response_model=BookingSchema, status_code=status.HTTP_201_CREATED)
-def create_booking(booking_in: BookingCreate, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+def create_booking(booking_in: BookingCreate, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
     if current_user.role != "tenant":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only tenants can create bookings")
 
@@ -52,6 +54,38 @@ def create_booking(booking_in: BookingCreate, request: Request, db: Session = De
         detail=f"Booking created for property {booking.property_id}",
         ip_address=ip_address,
     )
+
+    landlord = db.query(User).filter(User.id == property_obj.owner_id).first()
+    if landlord:
+        content = f"租客「{current_user.full_name or current_user.username}」预约了您的房源「{property_obj.title}」看房，预约时间：{booking_in.appointment_time.strftime('%Y-%m-%d %H:%M')}。"
+        notification = MessageModel(
+            from_user_id=current_user.id,
+            to_user_id=landlord.id,
+            property_id=booking.property_id,
+            content=content,
+            message_type="notification",
+        )
+        db.add(notification)
+
+        unread_before = crud_message.get_unread_count(db, user_id=landlord.id)
+
+        async def notify_landlord():
+            payload = {
+                "type": "new_message",
+                "message": {
+                    "from_user_id": current_user.id,
+                    "to_user_id": landlord.id,
+                    "content": content,
+                    "message_type": "notification",
+                    "property_id": booking.property_id,
+                    "is_read": False,
+                },
+                "unread_count": unread_before + 1,
+            }
+            await ws_manager.send_personal(payload, landlord.id)
+
+        background_tasks.add_task(notify_landlord)
+
     return booking
 
 

@@ -24,7 +24,8 @@ const routes = [
       { path: 'news/:id', name: 'NewsDetail', component: () => import('../views/common/NewsDetail.vue') },
       { path: 'search', name: 'SmartSearch', component: () => import('../views/common/SmartSearch.vue') },
       { path: 'profile', name: 'Profile', component: () => import('../views/common/Profile.vue') },
-      { path: 'messages', name: 'Messages', component: () => import('../views/common/Messages.vue') },
+      { path: 'messages', name: 'Messages', component: () => import('../views/common/Chat.vue') },
+      { path: 'notifications', name: 'Notifications', component: () => import('../views/common/Notifications.vue') },
       {
         path: 'tenant',
         meta: { role: 'tenant' },
@@ -60,6 +61,8 @@ const routes = [
           { path: 'users', name: 'AdminUsers', component: () => import('../views/admin/Users.vue') },
           { path: 'properties', name: 'AdminProperties', component: () => import('../views/admin/Properties.vue') },
           { path: 'audit-logs', name: 'AdminAuditLogs', component: () => import('../views/admin/AuditLogs.vue') },
+          { path: 'messages', name: 'AdminMessages', component: () => import('../views/common/Chat.vue') },
+          { path: 'notifications', name: 'AdminNotifications', component: () => import('../views/common/Notifications.vue') },
         ],
       },
     ],

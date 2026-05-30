@@ -20,6 +20,11 @@ export default defineConfig(({ mode }) => {
           target: rootEnv.VITE_UPLOADS_BASE_URL || 'http://127.0.0.1:8000',
           changeOrigin: true,
         },
+        '/ws': {
+          target: rootEnv.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
   }
