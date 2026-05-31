@@ -16,13 +16,13 @@ from app.schemas.contract import (
     ContractUpdate,
     ContractReject,
     ContractTerminate,
+    ContractSignRequest,
 )
 from app.core.enums import (
     ContractStatus,
     PropertyReviewStatus,
     PropertyStatus,
     CANCELLABLE_STATUSES,
-    REJECTABLE_STATUSES,
 )
 
 router = APIRouter()
@@ -114,7 +114,7 @@ def auto_create_contract(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能租赁自己的房源")
     if property_obj.review_status != PropertyReviewStatus.APPROVED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="房源未通过审核")
-    if property_obj.status != PropertyStatus.VACANT:
+    if property_obj.status != PropertyStatus.PUBLISHED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="房源当前不可租赁")
 
     # 检查房源是否已有活跃合同
@@ -171,6 +171,14 @@ def list_contracts(
     current_user=Depends(get_current_active_user),
 ):
     """获取合同列表（根据角色过滤）"""
+    # 自动检查并过期已到期的合同
+    try:
+        expired_count = crud_contract.check_and_expire_contracts(db)
+        if expired_count > 0:
+            print(f"自动过期了 {expired_count} 个合同")
+    except Exception as e:
+        print(f"检查过期合同时出错: {e}")
+    
     if current_user.role == "admin":
         return crud_contract.get_contracts(db, status=status_filter, skip=skip, limit=limit)
     elif current_user.role == "landlord":
@@ -209,13 +217,26 @@ def update_contract(
     if contract.landlord_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权修改此合同")
 
+    # 将合同状态转换为字符串进行比较
+    status_str = str(contract.status) if contract.status else ""
+
     # 允许在双方都未完全签署前修改
-    if contract.status == ContractStatus.ACTIVE:
+    if status_str == "active":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="已生效的合同不能修改条款")
-    if contract.status in [ContractStatus.TERMINATED, ContractStatus.CANCELLED, ContractStatus.REJECTED]:
+    if status_str in ["terminated", "cancelled", "rejected"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="已结束的合同不能修改")
 
-    updated = crud_contract.update_contract(db, contract, contract_in)
+    # 对于DRAFT、PENDING_SIGN、PART_SIGNED状态，使用简化的更新方法
+    if status_str in ["draft", "pending_sign", "part_signed"]:
+        update_data = contract_in.model_dump(exclude_unset=True)
+        try:
+            updated = crud_contract.update_contract_editable_fields(db, contract, update_data)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    else:
+        # 其他状态使用原有的更新方法（可能重置签署状态）
+        updated = crud_contract.update_contract(db, contract, contract_in)
+    
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
@@ -223,7 +244,7 @@ def update_contract(
         action="update_contract",
         target_type="contract",
         target_id=updated.id,
-        detail=f"Contract updated (signature reset if needed)",
+        detail=f"Contract updated (status: {updated.status})",
         ip_address=ip_address,
     )
     return updated
@@ -232,6 +253,7 @@ def update_contract(
 @router.put("/{contract_id}/sign/landlord", response_model=ContractSchema)
 def sign_contract_landlord(
     contract_id: int,
+    sign_request: ContractSignRequest,
     request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_landlord),
@@ -244,11 +266,24 @@ def sign_contract_landlord(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权签署此合同")
     if contract.signed_by_landlord:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="房东已签署此合同")
-    if contract.status in [ContractStatus.CANCELLED, ContractStatus.REJECTED, ContractStatus.TERMINATED]:
+    # 允许草稿、待签署、部分签署状态的合同进行签署
+    if contract.status in [ContractStatus.CANCELLED, ContractStatus.TERMINATED, ContractStatus.EXPIRED]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="已结束的合同不能签署")
 
+    # 记录签署信息（包括手写签名）
+    device_info = sign_request.device_info
+    signature_image = sign_request.signature_image
+    
     contract.signed_by_landlord = 1
     contract.landlord_signed_at = datetime.utcnow()
+    contract.landlord_sign_ip = None  # 不记录IP地址
+    contract.landlord_sign_device = device_info
+    contract.landlord_signature_image = signature_image
+
+    # 如果合同是草稿状态，先转为待签署状态
+    status_str = str(contract.status) if contract.status else ""
+    if status_str == "draft":
+        contract.status = ContractStatus.PENDING_SIGN
 
     if contract.signed_by_tenant:
         # 双方都已签署，合同生效
@@ -266,7 +301,7 @@ def sign_contract_landlord(
             property_id=contract.property_id,
         )
     else:
-        contract.status = ContractStatus.PENDING_TENANT_SIGN
+        contract.status = ContractStatus.PART_SIGNED
 
         # 通知租客来签署
         _send_message_to_user(
@@ -280,7 +315,6 @@ def sign_contract_landlord(
     db.commit()
     db.refresh(contract)
 
-    ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
@@ -288,7 +322,7 @@ def sign_contract_landlord(
         target_type="contract",
         target_id=contract.id,
         detail="Contract signed by landlord",
-        ip_address=ip_address,
+        ip_address=None,
     )
     return contract
 
@@ -296,11 +330,12 @@ def sign_contract_landlord(
 @router.put("/{contract_id}/sign/tenant", response_model=ContractSchema)
 def sign_contract_tenant(
     contract_id: int,
+    sign_request: ContractSignRequest,
     request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    """租客签署合同"""
+    """租客签署合同（必须房东先签署后才能签署）"""
     contract = crud_contract.get_contract(db, contract_id)
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="合同不存在")
@@ -308,11 +343,35 @@ def sign_contract_tenant(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权签署此合同")
     if contract.signed_by_tenant:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="租客已签署此合同")
-    if contract.status in [ContractStatus.CANCELLED, ContractStatus.REJECTED, ContractStatus.TERMINATED]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="已结束的合同不能签署")
+    
+    # 关键验证：租客只能在房东已签署的情况下才能签署
+    if not contract.signed_by_landlord:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="房东尚未签署此合同，请等待房东先签署"
+        )
+    
+    # 只允许在部分签署状态下签署（即房东已签）
+    if contract.status not in [ContractStatus.PART_SIGNED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="当前状态不允许签署，请等待房东先签署"
+        )
 
+    # 记录签署信息（包括手写签名）
+    device_info = sign_request.device_info
+    signature_image = sign_request.signature_image
+    
     contract.signed_by_tenant = 1
     contract.tenant_signed_at = datetime.utcnow()
+    contract.tenant_sign_ip = None  # 不记录IP地址
+    contract.tenant_sign_device = device_info
+    contract.tenant_signature_image = signature_image
+
+    # 如果合同是草稿状态，先转为待签署状态
+    status_str = str(contract.status) if contract.status else ""
+    if status_str == "draft":
+        contract.status = ContractStatus.PENDING_SIGN
 
     if contract.signed_by_landlord:
         # 双方都已签署，合同生效
@@ -330,7 +389,7 @@ def sign_contract_tenant(
             property_id=contract.property_id,
         )
     else:
-        contract.status = ContractStatus.PENDING_LANDLORD_SIGN
+        contract.status = ContractStatus.PART_SIGNED
 
         # 通知房东来签署
         _send_message_to_user(
@@ -344,7 +403,6 @@ def sign_contract_tenant(
     db.commit()
     db.refresh(contract)
 
-    ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
@@ -352,7 +410,7 @@ def sign_contract_tenant(
         target_type="contract",
         target_id=contract.id,
         detail="Contract signed by tenant",
-        ip_address=ip_address,
+        ip_address=None,
     )
     return contract
 
@@ -502,11 +560,11 @@ def reject_contract(
     if contract.landlord_id != current_user.id and contract.tenant_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作此合同")
 
-    # 状态检查
-    if contract.status not in REJECTABLE_STATUSES:
+    # 状态检查：只有草稿或待签署状态可以拒绝
+    if contract.status not in CANCELLABLE_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="只有待签约状态的合同可以拒绝"
+            detail="只有草稿或待签署状态的合同可以拒绝"
         )
 
     contract = crud_contract.reject_contract(db, contract, reason=reject_data.reason)
@@ -563,10 +621,10 @@ def terminate_contract(
     contract.terminated_at = datetime.utcnow()
     contract.terminate_reason = terminate_data.reason
 
-    # 合同终止，恢复房源状态为空闲
+    # 合同终止，恢复房源状态为已发布（空置）
     property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
     if property_obj:
-        property_obj.status = PropertyStatus.VACANT
+        property_obj.status = PropertyStatus.PUBLISHED
 
     # 通知对方
     if current_user.id == contract.landlord_id:

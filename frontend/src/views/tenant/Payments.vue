@@ -5,28 +5,28 @@
       <el-button v-if="contracts.length" type="primary" @click="showCreateDialog = true">缴纳租金</el-button>
     </div>
     <el-table :data="payments" stripe v-loading="loading">
-      <el-table-column prop="payment_no" label="支付单号" width="220" />
-      <el-table-column label="金额" width="100">
+      <el-table-column prop="payment_no" label="支付单号" min-width="220" show-overflow-tooltip />
+      <el-table-column label="金额" width="100" align="right">
         <template #default="{ row }">¥{{ row.amount }}</template>
       </el-table-column>
-      <el-table-column label="支付方式" width="100">
+      <el-table-column label="支付方式" width="100" align="center">
         <template #default="{ row }">{{ methodLabel(row.payment_method) }}</template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="应缴日期" width="120">
+      <el-table-column label="应缴日期" min-width="120">
         <template #default="{ row }">{{ formatDate(row.due_date) }}</template>
       </el-table-column>
-      <el-table-column label="实缴日期" width="120">
+      <el-table-column label="实缴日期" min-width="120">
         <template #default="{ row }">{{ formatDate(row.paid_at) }}</template>
       </el-table-column>
-      <el-table-column label="逾期天数" width="90">
+      <el-table-column label="逾期天数" width="100" align="center">
         <template #default="{ row }">{{ row.overdue_days || 0 }}天</template>
       </el-table-column>
-      <el-table-column label="操作" width="120">
+      <el-table-column label="操作" min-width="120" align="center">
         <template #default="{ row }">
           <el-button v-if="row.status === 'pending'" type="primary" size="small" @click="handlePay(row)">支付</el-button>
         </template>
@@ -171,4 +171,13 @@ onMounted(loadData)
 
 <style scoped>
 .pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+
+/* 让表格占满容器宽度 */
+:deep(.el-table) {
+  width: 100% !important;
+}
+
+:deep(.el-table__inner-wrapper) {
+  width: 100% !important;
+}
 </style>

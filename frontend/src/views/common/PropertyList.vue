@@ -62,16 +62,12 @@ const filters = reactive({ region: '', floor_plan: '' })
 const statusMap = {
   published: '已发布',
   unpublished: '未发布',
-  vacant: '空置',
-  rented: '已出租',
-  maintenance: '维修中'
+  rented: '已出租'
 }
 const statusTypeMap = {
   published: 'success',
   unpublished: 'info',
-  vacant: 'success',
-  rented: 'warning',
-  maintenance: 'danger'
+  rented: 'warning'
 }
 
 function statusLabel(status) {

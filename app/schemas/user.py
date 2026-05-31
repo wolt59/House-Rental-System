@@ -35,6 +35,8 @@ class UserInDBBase(UserBase, UTCDatetimeModel):
     id: int
     avatar_url: Optional[str] = None
     is_active: bool
+    id_card_number: Optional[str] = None  # 添加身份证号码字段
+    remark: Optional[str] = None  # 添加备注字段
     last_login_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

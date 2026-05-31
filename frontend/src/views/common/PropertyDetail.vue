@@ -101,6 +101,7 @@
 
           <!-- 基本信息网格 -->
           <div class="info-grid">
+            <!-- 位置信息 -->
             <div class="info-item">
               <div class="info-label">地址</div>
               <div class="info-value">{{ property.address }}</div>
@@ -122,42 +123,38 @@
               <div class="info-value">{{ property.community_name }}</div>
             </div>
 
+            <!-- 房屋物理属性 -->
             <div class="info-row">
               <div class="info-item">
                 <div class="info-label">类型</div>
-                <div class="info-value">{{ property.rental_type || property.property_type || '-' }}</div>
+                <div class="info-value">{{ property.rental_type || '-' }}</div>
               </div>
               <div class="info-item">
                 <div class="info-label">户型</div>
-                <div class="info-value">{{ formatFloorPlan(property) }}</div>
+                <div class="info-value">{{ property.floor_plan || '-' }}</div>
               </div>
             </div>
 
             <div class="info-row">
               <div class="info-item">
                 <div class="info-label">建筑面积</div>
-                <div class="info-value">{{ property.building_area ? property.building_area + '㎡' : (property.area ? property.area + '㎡' : '-') }}</div>
+                <div class="info-value">{{ property.building_area ? property.building_area + '㎡' : '-' }}</div>
               </div>
               <div class="info-item">
-                <div class="info-label">实用面积</div>
-                <div class="info-value">{{ property.usable_area ? property.usable_area + '㎡' : '-' }}</div>
+                <div class="info-label">朝向</div>
+                <div class="info-value">{{ property.orientation || '-' }}</div>
               </div>
             </div>
 
             <div class="info-row">
               <div class="info-item">
-                <div class="info-label">朝向</div>
-                <div class="info-value">{{ property.orientation || '-' }}</div>
-              </div>
-              <div class="info-item">
                 <div class="info-label">楼层</div>
                 <div class="info-value">{{ formatFloorNumber(property) }}</div>
               </div>
-            </div>
-
-            <div class="info-item">
-              <div class="info-label">装修程度</div>
-              <div class="info-value">{{ property.decoration || '-' }}</div>
+              <div class="info-item">
+                <div class="info-label">装修</div>
+                <div class="info-value">{{ property.decoration || '-' }}</div>
+              </div>
             </div>
           </div>
 
@@ -237,17 +234,6 @@
             </div>
           </div>
 
-          <!-- 状态信息 -->
-          <div class="divider"></div>
-          <div class="status-bar">
-            <div class="status-left">
-              <el-tag :type="statusType" size="large">{{ statusLabel }}</el-tag>
-            </div>
-            <div class="status-right">
-              <span class="view-count">👁️ {{ property.view_count || 0 }} 次浏览</span>
-            </div>
-          </div>
-
           <!-- 操作按钮 -->
           <div class="action-buttons" v-if="userStore.isLoggedIn && userStore.isTenant">
             <div class="action-btn action-btn-primary" @click="showBookingDialog = true">
@@ -321,9 +307,7 @@ const statusType = computed(() => {
   const map = { 
     published: 'success', 
     unpublished: 'info',
-    vacant: 'success', 
-    rented: 'warning', 
-    maintenance: 'danger' 
+    rented: 'warning'
   }
   return map[property.value.status] || 'info'
 })
@@ -331,9 +315,7 @@ const statusLabel = computed(() => {
   const map = { 
     published: '已发布', 
     unpublished: '未发布',
-    vacant: '空置', 
-    rented: '已出租', 
-    maintenance: '维修中' 
+    rented: '已出租'
   }
   return map[property.value.status] || property.value.status
 })
@@ -345,18 +327,6 @@ const hasSupplementInfo = computed(() => {
          property.value.total_households || 
          property.value.property_management_type
 })
-
-// 格式化户型显示
-function formatFloorPlan(property) {
-  if (property.bedrooms || property.livingrooms || property.bathrooms) {
-    const parts = []
-    if (property.bedrooms) parts.push(`${property.bedrooms}室`)
-    if (property.livingrooms) parts.push(`${property.livingrooms}厅`)
-    if (property.bathrooms) parts.push(`${property.bathrooms}卫`)
-    return parts.join('') || '-'
-  }
-  return property.floor_plan || '-'
-}
 
 // 格式化楼层显示
 function formatFloorNumber(property) {
@@ -591,28 +561,6 @@ onMounted(loadData)
   font-weight: 600;
   color: #303133;
   margin: 0 0 16px 0;
-}
-
-/* 状态栏 */
-.status-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-}
-
-.status-left,
-.status-right {
-  display: flex;
-  align-items: center;
-}
-
-.view-count {
-  font-size: 14px;
-  color: #606266;
-  font-weight: 500;
 }
 
 /* 操作按钮 */

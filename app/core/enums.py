@@ -12,11 +12,9 @@ class PropertyReviewStatus(str, Enum):
 
 class PropertyStatus(str, Enum):
     """房源状态枚举"""
-    PUBLISHED = "published"  # 已发布（租客可见）
-    UNPUBLISHED = "unpublished"  # 未发布（租客不可见）
-    VACANT = "vacant"  # 空置（已发布且未出租）
-    RENTED = "rented"  # 已出租
-    MAINTENANCE = "maintenance"  # 维修中
+    UNPUBLISHED = "unpublished"  # 未发布（草稿或下架，租客不可见）
+    PUBLISHED = "published"  # 已发布（空置状态，租客可见可租）
+    RENTED = "rented"  # 已出租（有生效合同）
 
 
 class PaymentStatus(str, Enum):
@@ -35,6 +33,14 @@ class BookingStatus(str, Enum):
     CANCELLED = "cancelled"  # 已取消
     NEGOTIATING = "negotiating"  # 待协商（房东提出改期）
     COMPLETED = "completed"  # 看房完成
+
+
+class ContractApplicationStatus(str, Enum):
+    """合约申请状态枚举"""
+    APPLY_PENDING = "apply_pending"  # 待房东确认
+    APPLY_APPROVED = "apply_approved"  # 房东已同意，已生成合同草稿
+    APPLY_REJECTED = "apply_rejected"  # 房东已拒绝
+    APPLY_CANCELLED = "apply_cancelled"  # 租客已取消
 
 
 class MaintenanceStatus(str, Enum):
@@ -62,31 +68,21 @@ class UserRole(str, Enum):
 
 class ContractStatus(str, Enum):
     """合同状态枚举"""
-    DRAFT = "draft"  # 草稿
-    PENDING_SIGN = "pending_sign"  # 待签约（双方都未签）
-    PENDING_LANDLORD_SIGN = "pending_landlord_sign"  # 待房东签约
-    PENDING_TENANT_SIGN = "pending_tenant_sign"  # 待租客签约
-    ACTIVE = "active"  # 生效中
-    TERMINATED = "terminated"  # 已终止
+    DRAFT = "draft"  # 草稿，可编辑
+    PENDING_SIGN = "pending_sign"  # 待签署（双方都未签）
+    PART_SIGNED = "part_signed"  # 一方已签署，内容已锁定
+    ACTIVE = "active"  # 双方已签署，合同生效
+    CHANGE_NEGOTIATING = "change_negotiating"  # 变更协商中
+    TERMINATE_NEGOTIATING = "terminate_negotiating"  # 解约协商中
+    TERMINATED = "terminated"  # 已提前解约
+    EXPIRED = "expired"  # 已到期
     CANCELLED = "cancelled"  # 已取消
-    REJECTED = "rejected"  # 已拒绝
-    EXPIRED = "expired"  # 已过期
 
 
-# 可取消的合同状态（未签署或仅一方签署）
+# 可取消的合同状态（草稿或待签署状态）
 CANCELLABLE_STATUSES = [
     ContractStatus.DRAFT,
     ContractStatus.PENDING_SIGN,
-    ContractStatus.PENDING_LANDLORD_SIGN,
-    ContractStatus.PENDING_TENANT_SIGN,
-]
-
-# 可拒绝的合同状态
-REJECTABLE_STATUSES = [
-    ContractStatus.DRAFT,
-    ContractStatus.PENDING_SIGN,
-    ContractStatus.PENDING_LANDLORD_SIGN,
-    ContractStatus.PENDING_TENANT_SIGN,
 ]
 
 class MessageType(str, Enum):
@@ -99,7 +95,6 @@ class MessageType(str, Enum):
 ACTIVE_OR_PENDING_STATUSES = [
     ContractStatus.DRAFT,
     ContractStatus.PENDING_SIGN,
-    ContractStatus.PENDING_LANDLORD_SIGN,
-    ContractStatus.PENDING_TENANT_SIGN,
+    ContractStatus.PART_SIGNED,
     ContractStatus.ACTIVE,
 ]

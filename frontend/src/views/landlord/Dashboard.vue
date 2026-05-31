@@ -197,7 +197,7 @@ function initPropertyChart(data) {
           formatter: '{b}: {c}套'
         },
         data: [
-          { value: data.vacant, name: '空置', itemStyle: { color: '#909399' } },
+          { value: data.published, name: '已发布', itemStyle: { color: '#909399' } },
           { value: data.rented, name: '已出租', itemStyle: { color: '#67c23a' } }
         ]
       }

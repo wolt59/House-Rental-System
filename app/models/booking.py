@@ -26,3 +26,4 @@ class Booking(Base):
 
     tenant = relationship("User", back_populates="bookings")
     property = relationship("Property", back_populates="bookings")
+    contract_applications = relationship("ContractApplication", back_populates="booking")

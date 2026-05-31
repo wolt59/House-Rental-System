@@ -152,9 +152,9 @@ function initPropertyStatusChart(data) {
           formatter: '{b}: {c}'
         },
         data: [
-          { value: data.vacant, name: '空置', itemStyle: { color: '#909399' } },
+          { value: data.published, name: '已发布', itemStyle: { color: '#909399' } },
           { value: data.rented, name: '已出租', itemStyle: { color: '#67c23a' } },
-          { value: data.maintenance, name: '维修中', itemStyle: { color: '#e6a23c' } },
+          { value: data.unpublished, name: '未发布', itemStyle: { color: '#e6a23c' } },
           { value: data.pending_review, name: '待审核', itemStyle: { color: '#f56c6c' } }
         ]
       }

@@ -119,7 +119,7 @@ def unpublish_property(db: Session, db_property: Property) -> Property:
     """暂停发布（房东操作）"""
     if db_property.review_status != PropertyReviewStatus.APPROVED.value:
         raise ValueError("只有审核通过的房源才能暂停发布")
-    if db_property.status in [PropertyStatus.RENTED.value, PropertyStatus.MAINTENANCE.value]:
+    if db_property.status == PropertyStatus.RENTED.value:
         raise ValueError(f"当前房源状态({db_property.status})不允许暂停发布")
     
     db_property.status = PropertyStatus.UNPUBLISHED.value
@@ -159,7 +159,7 @@ def withdraw_review(db: Session, db_property: Property) -> Property:
 
 def admin_unpublish_property(db: Session, db_property: Property, reason: Optional[str] = None) -> Property:
     """管理员强制下架（变为草稿和未发布状态，房东可修改后重新提交）"""
-    if db_property.status in [PropertyStatus.RENTED.value, PropertyStatus.MAINTENANCE.value]:
+    if db_property.status == PropertyStatus.RENTED.value:
         raise ValueError(f"当前房源状态({db_property.status})不允许下架")
     
     db_property.status = PropertyStatus.UNPUBLISHED.value
@@ -195,14 +195,14 @@ def get_landlord_property_stats(
                 func.sum(case((Property.review_status == "rejected", 1), else_=0)), 0
             ).label("rejected_properties"),
             func.coalesce(
-                func.sum(case((Property.status == "vacant", 1), else_=0)), 0
-            ).label("vacant_properties"),
+                func.sum(case((Property.status == "published", 1), else_=0)), 0
+            ).label("published_properties"),
             func.coalesce(
                 func.sum(case((Property.status == "rented", 1), else_=0)), 0
             ).label("rented_properties"),
             func.coalesce(
-                func.sum(case((Property.status == "maintenance", 1), else_=0)), 0
-            ).label("maintenance_properties"),
+                func.sum(case((Property.status == "unpublished", 1), else_=0)), 0
+            ).label("unpublished_properties"),
         )
         .outerjoin(Property, Property.owner_id == User.id)
         .filter(User.role == "landlord")
@@ -225,9 +225,9 @@ def get_landlord_property_stats(
             "approved_properties": row.approved_properties,
             "pending_properties": row.pending_properties,
             "rejected_properties": row.rejected_properties,
-            "vacant_properties": row.vacant_properties,
+            "published_properties": row.published_properties,
             "rented_properties": row.rented_properties,
-            "maintenance_properties": row.maintenance_properties,
+            "unpublished_properties": row.unpublished_properties,
         }
         for row in results
     ]

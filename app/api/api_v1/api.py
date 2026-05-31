@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.api_v1.endpoints import (
     auth, properties, users, bookings, maintenance, complaints,
     messages, news, audit_logs, contracts, payments, property_images, stats,
+    contract_applications, contract_changes, contract_terminations,
 )
 
 api_router = APIRouter()
@@ -19,3 +20,6 @@ api_router.include_router(payments.router, prefix="/payments", tags=["payments"]
 api_router.include_router(property_images.router, prefix="/property-images", tags=["property_images"])
 api_router.include_router(stats.router, prefix="/stats", tags=["stats"])
 api_router.include_router(audit_logs.router, prefix="/admin/audit-logs", tags=["audit_logs"])
+api_router.include_router(contract_applications.router, prefix="/contract-applications", tags=["contract_applications"])
+api_router.include_router(contract_changes.router, prefix="/contract-changes", tags=["contract_changes"])
+api_router.include_router(contract_terminations.router, prefix="/contract-terminations", tags=["contract_terminations"])

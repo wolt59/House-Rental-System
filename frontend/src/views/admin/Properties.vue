@@ -15,9 +15,7 @@
         <el-select v-model="filters.status" clearable placeholder="全部" @change="loadData">
           <el-option label="已发布" value="published" />
           <el-option label="未发布" value="unpublished" />
-          <el-option label="空置" value="vacant" />
           <el-option label="已出租" value="rented" />
-          <el-option label="维修中" value="maintenance" />
         </el-select>
       </el-form-item>
       <el-form-item label="搜索">
@@ -30,25 +28,25 @@
     </el-form>
     <el-table :data="properties" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="title" label="标题" width="200" />
-      <el-table-column prop="address" label="地址" />
-      <el-table-column label="房东" width="100">
+      <el-table-column prop="title" label="标题" min-width="150" show-overflow-tooltip />
+      <el-table-column prop="address" label="地址" min-width="200" show-overflow-tooltip />
+      <el-table-column label="房东" min-width="100" show-overflow-tooltip>
         <template #default="{ row }">{{ userNames[row.owner_id] || '加载中...' }}</template>
       </el-table-column>
-      <el-table-column label="租金" width="100">
+      <el-table-column label="租金" width="100" align="right">
         <template #default="{ row }">¥{{ row.rent }}/月</template>
       </el-table-column>
-      <el-table-column label="审核状态" width="100">
+      <el-table-column label="审核状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="reviewType(row.review_status)" size="small">{{ reviewLabel(row.review_status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="房源状态" width="100">
+      <el-table-column label="房源状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="320">
+      <el-table-column label="操作" min-width="320" align="center">
         <template #default="{ row }">
           <el-button v-if="row.review_status === 'pending' || row.review_status === 'reviewing'" 
                      type="success" size="small" @click="handleReview(row, 'approved')">通过</el-button>
@@ -103,8 +101,8 @@ const { resolveItems, userNames, propertyNames } = useNameResolver()
 
 const reviewMap = { draft: '草稿', pending: '待审核', reviewing: '审核中', approved: '已通过', rejected: '已拒绝' }
 const reviewTypeMap = { draft: 'info', pending: 'warning', reviewing: 'primary', approved: 'success', rejected: 'danger' }
-const statusMap = { published: '已发布', unpublished: '未发布', vacant: '空置', rented: '已出租', maintenance: '维修中' }
-const statusTypeMap = { published: 'success', unpublished: 'info', vacant: 'success', rented: 'warning', maintenance: 'danger' }
+const statusMap = { published: '已发布', unpublished: '未发布', rented: '已出租' }
+const statusTypeMap = { published: 'success', unpublished: 'info', rented: 'warning' }
 function reviewLabel(s) { return reviewMap[s] || s }
 function reviewType(s) { return reviewTypeMap[s] || 'info' }
 function statusLabel(s) { return statusMap[s] || s }
@@ -205,4 +203,13 @@ onMounted(loadData)
 
 <style scoped>
 .pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+
+/* 让表格占满容器宽度 */
+:deep(.el-table) {
+  width: 100% !important;
+}
+
+:deep(.el-table__inner-wrapper) {
+  width: 100% !important;
+}
 </style>

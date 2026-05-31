@@ -46,8 +46,27 @@ def list_landlord_property_stats(
 
 @router.get("/{user_id}", response_model=User)
 def read_user(user_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+    # 允许管理员、用户本人、或合同相关的房东/租客查看
     if current_user.role != "admin" and current_user.id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        # 检查是否是合同相关的用户（房东查看租客，或租客查看房东）
+        from app.models.contract import Contract
+        from app.models.contract_application import ContractApplication
+        
+        # 检查合同关联
+        related_contract = db.query(Contract).filter(
+            (Contract.landlord_id == current_user.id) | (Contract.tenant_id == current_user.id),
+            (Contract.landlord_id == user_id) | (Contract.tenant_id == user_id)
+        ).first()
+        
+        # 检查合约申请关联（房东查看申请自己房源的租客，或租客查看房东）
+        related_application = db.query(ContractApplication).filter(
+            (ContractApplication.landlord_id == current_user.id) | (ContractApplication.tenant_id == current_user.id),
+            (ContractApplication.landlord_id == user_id) | (ContractApplication.tenant_id == user_id)
+        ).first()
+        
+        if not related_contract and not related_application:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    
     user = crud_user.get_user(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

@@ -13,21 +13,21 @@
 
     <el-table :data="bookings" stripe v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column label="租客" width="120">
+      <el-table-column label="租客" min-width="120" show-overflow-tooltip>
         <template #default="{ row }">{{ userNames[row.tenant_id] || '加载中...' }}</template>
       </el-table-column>
-      <el-table-column label="房源" min-width="150">
+      <el-table-column label="房源" min-width="150" show-overflow-tooltip>
         <template #default="{ row }">{{ propertyNames[row.property_id] || '加载中...' }}</template>
       </el-table-column>
-      <el-table-column label="预约时间" width="180">
+      <el-table-column label="预约时间" min-width="180">
         <template #default="{ row }">{{ formatDate(row.appointment_time) }}</template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-            <el-table-column label="操作" width="380" fixed="right">
+      <el-table-column label="操作" min-width="380" align="center">
         <template #default="{ row }">
           <el-button v-if="row.status === 'pending'" type="success" size="small" @click="handleApprove(row)">同意</el-button>
           <el-button v-if="row.status === 'pending'" type="danger" size="small" @click="handleReject(row)">拒绝</el-button>
@@ -277,4 +277,13 @@ onMounted(loadData)
 
 <style scoped>
 .pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+
+/* 让表格占满容器宽度 */
+:deep(.el-table) {
+  width: 100% !important;
+}
+
+:deep(.el-table__inner-wrapper) {
+  width: 100% !important;
+}
 </style>

@@ -33,3 +33,6 @@ class User(Base):
     contracts_as_landlord = relationship("Contract", foreign_keys="Contract.landlord_id", back_populates="landlord")
     contracts_as_tenant = relationship("Contract", foreign_keys="Contract.tenant_id", back_populates="tenant")
     payments = relationship("Payment", foreign_keys="Payment.tenant_id", back_populates="tenant")
+    # 合约申请关系
+    contract_applications_as_tenant = relationship("ContractApplication", foreign_keys="ContractApplication.tenant_id", back_populates="tenant")
+    contract_applications_as_landlord = relationship("ContractApplication", foreign_keys="ContractApplication.landlord_id", back_populates="landlord")

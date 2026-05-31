@@ -12,23 +12,23 @@
     </el-form>
     <el-table :data="users" stripe v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="username" label="用户名" width="140" />
-      <el-table-column prop="email" label="邮箱" min-width="220" />
-      <el-table-column prop="full_name" label="姓名" width="120" />
-      <el-table-column label="角色" width="100">
+      <el-table-column prop="username" label="用户名" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="email" label="邮箱" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="full_name" label="姓名" min-width="120" show-overflow-tooltip />
+      <el-table-column label="角色" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="roleType(row.role)" size="small">{{ roleLabel(row.role) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="row.is_active ? 'success' : 'danger'" size="small">{{ row.is_active ? '正常' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="注册时间" width="180">
+      <el-table-column label="注册时间" min-width="180">
         <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" min-width="200" align="center">
         <template #default="{ row }">
           <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
           <el-button :type="row.is_active ? 'danger' : 'success'" size="small" @click="handleToggleStatus(row)">
@@ -146,4 +146,13 @@ onMounted(loadData)
 
 <style scoped>
 .pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+
+/* 让表格占满容器宽度 */
+:deep(.el-table) {
+  width: 100% !important;
+}
+
+:deep(.el-table__inner-wrapper) {
+  width: 100% !important;
+}
 </style>

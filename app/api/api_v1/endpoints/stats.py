@@ -47,7 +47,7 @@ def admin_dashboard(db: Session = Depends(get_db), current_user=Depends(get_curr
     total_users = db.query(func.count(User.id)).scalar()
     total_properties = db.query(func.count(Property.id)).scalar()
     approved_properties = db.query(func.count(Property.id)).filter(Property.review_status == PropertyReviewStatus.APPROVED).scalar()
-    vacant_properties = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.VACANT).scalar()
+    published_properties = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.PUBLISHED).scalar()
     rented_properties = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.RENTED).scalar()
     total_contracts = db.query(func.count(Contract.id)).scalar()
     active_contracts = db.query(func.count(Contract.id)).filter(Contract.status == ContractStatus.ACTIVE).scalar()
@@ -66,7 +66,7 @@ def admin_dashboard(db: Session = Depends(get_db), current_user=Depends(get_curr
         "properties": {
             "total": total_properties,
             "approved": approved_properties,
-            "vacant": vacant_properties,
+            "published": published_properties,
             "rented": rented_properties,
             "occupancy_rate": occupancy_rate,
         },
@@ -136,16 +136,16 @@ def get_user_activity(db: Session = Depends(get_db), current_user=Depends(get_cu
 def get_property_status(db: Session = Depends(get_db), current_user=Depends(get_current_active_admin)):
     """获取房源状态分布"""
     total = db.query(func.count(Property.id)).scalar()
-    vacant = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.VACANT).scalar()
+    published = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.PUBLISHED).scalar()
     rented = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.RENTED).scalar()
-    maintenance = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.MAINTENANCE).scalar()
+    unpublished = db.query(func.count(Property.id)).filter(Property.status == PropertyStatus.UNPUBLISHED).scalar()
     pending = db.query(func.count(Property.id)).filter(Property.review_status == PropertyReviewStatus.PENDING).scalar()
 
     return {
         "total": total,
-        "vacant": vacant or 0,
+        "published": published or 0,
         "rented": rented or 0,
-        "maintenance": maintenance or 0,
+        "unpublished": unpublished or 0,
         "pending_review": pending or 0
     }
 
@@ -156,8 +156,8 @@ def landlord_dashboard(db: Session = Depends(get_db), current_user=Depends(get_c
     landlord_id = current_user.id
 
     total_properties = db.query(func.count(Property.id)).filter(Property.owner_id == landlord_id).scalar()
-    vacant_properties = db.query(func.count(Property.id)).filter(
-        Property.owner_id == landlord_id, Property.status == "vacant"
+    published_properties = db.query(func.count(Property.id)).filter(
+        Property.owner_id == landlord_id, Property.status == "published"
     ).scalar()
     rented_properties = db.query(func.count(Property.id)).filter(
         Property.owner_id == landlord_id, Property.status == "rented"
@@ -196,7 +196,7 @@ def landlord_dashboard(db: Session = Depends(get_db), current_user=Depends(get_c
     return {
         "properties": {
             "total": total_properties,
-            "vacant": vacant_properties,
+            "published": published_properties,
             "rented": rented_properties,
             "occupancy_rate": occupancy_rate
         },

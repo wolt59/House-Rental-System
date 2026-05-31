@@ -5,22 +5,22 @@
     </div>
     <el-table :data="list" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column label="房源" width="100">
+      <el-table-column label="房源" min-width="100" show-overflow-tooltip>
         <template #default="{ row }">{{ propertyNames[row.property_id] || '加载中...' }}</template>
       </el-table-column>
-      <el-table-column label="租客" width="100">
+      <el-table-column label="租客" min-width="100" show-overflow-tooltip>
         <template #default="{ row }">{{ userNames[row.tenant_id] || '加载中...' }}</template>
       </el-table-column>
-      <el-table-column prop="title" label="标题" width="200" />
-      <el-table-column prop="complaint_type" label="类型" width="100" />
-      <el-table-column prop="content" label="内容" />
-      <el-table-column label="状态" width="100">
+      <el-table-column prop="title" label="标题" min-width="150" show-overflow-tooltip />
+      <el-table-column prop="complaint_type" label="类型" width="100" align="center" />
+      <el-table-column prop="content" label="内容" min-width="200" show-overflow-tooltip />
+      <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="handled_by" label="处理人" width="100" />
-      <el-table-column label="操作" width="200">
+      <el-table-column prop="handled_by" label="处理人" min-width="100" show-overflow-tooltip />
+      <el-table-column label="操作" min-width="200" align="center">
         <template #default="{ row }">
           <el-button v-if="row.status === 'open'" type="primary" size="small" @click="handleProcess(row)">处理</el-button>
           <el-button v-if="row.status === 'in_progress'" type="success" size="small" @click="handleResolve(row)">解决</el-button>
@@ -171,4 +171,13 @@ onMounted(loadData)
 
 <style scoped>
 .pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+
+/* 让表格占满容器宽度 */
+:deep(.el-table) {
+  width: 100% !important;
+}
+
+:deep(.el-table__inner-wrapper) {
+  width: 100% !important;
+}
 </style>

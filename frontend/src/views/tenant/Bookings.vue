@@ -16,21 +16,21 @@
 
     <el-table :data="bookings" stripe v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column label="房源" min-width="200">
+      <el-table-column label="房源" min-width="200" show-overflow-tooltip>
         <template #default="{ row }">房源 #{{ row.property_id }}</template>
       </el-table-column>
-      <el-table-column label="预约时间" width="180">
+      <el-table-column label="预约时间" min-width="180">
         <template #default="{ row }">{{ formatDate(row.appointment_time) }}</template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="note" label="备注" min-width="150" />
-      <el-table-column label="操作" width="320" fixed="right">
+      <el-table-column prop="note" label="备注" min-width="150" show-overflow-tooltip />
+      <el-table-column label="操作" min-width="320" align="center">
         <template #default="{ row }">
-          <el-button v-if="row.status === 'approved'" type="primary" size="small" @click="handleRequestContract(row)">申请签约</el-button>
+          <el-button v-if="row.status === 'completed' && !bookingWithApplications.has(row.id)" type="primary" size="small" @click="showContractApplicationDialog(row)">发起合约申请</el-button>
           <el-button v-if="row.status === 'approved'" type="success" size="small" @click="handleComplete(row)">标记完成</el-button>
           <el-button v-if="row.status === 'pending'" type="danger" size="small" @click="handleCancel(row)">取消</el-button>
           <el-button v-if="row.status === 'negotiating'" type="primary" size="small" @click="handleAcceptReschedule(row)">同意改期</el-button>
@@ -70,6 +70,7 @@ import { getBookings, updateBooking, completeBooking, respondReschedule } from '
 import { autoCreateContract } from '../../api/contract'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
+import request from '../../utils/request'
 
 const router = useRouter()
 const bookings = ref([])
@@ -80,6 +81,7 @@ const currentPage = ref(1)
 const activeTab = ref('all')
 const detailVisible = ref(false)
 const currentItem = ref(null)
+const bookingWithApplications = ref(new Set()) // 存储已有申请的booking_id
 
 const statusMap = { 
   pending: '待确认', 
@@ -100,6 +102,33 @@ const statusTypeMap = {
 function statusLabel(s) { return statusMap[s] || s }
 function statusType(s) { return statusTypeMap[s] || 'info' }
 function formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : '' }
+
+// 加载已有申请的booking状态
+async function loadApplicationStatus() {
+  try {
+    // 获取所有已完成的booking
+    const completedBookings = bookings.value.filter(b => b.status === 'completed')
+    if (completedBookings.length === 0) return
+    
+    // 清空之前的记录
+    bookingWithApplications.value.clear()
+    
+    // 获取当前用户的所有合约申请
+    const applications = await request.get('/api/v1/contract-applications/', {
+      params: { skip: 0, limit: 100 } // 获取足够多的申请
+    })
+    
+    // 检查每个booking是否已有申请
+    for (const booking of completedBookings) {
+      const hasApplication = applications.some(app => app.booking_id === booking.id)
+      if (hasApplication) {
+        bookingWithApplications.value.add(booking.id)
+      }
+    }
+  } catch (e) {
+    console.error('加载申请状态失败:', e)
+  }
+}
 
 async function loadData() {
   loading.value = true
@@ -124,6 +153,7 @@ async function loadData() {
       const res = await getBookings({ ...params, status: 'completed' })
       bookings.value = Array.isArray(res) ? res : []
       total.value = bookings.value.length
+      await loadApplicationStatus()
       return
     }
     
@@ -134,6 +164,7 @@ async function loadData() {
     const res = await getBookings(params)
     bookings.value = Array.isArray(res) ? res : []
     total.value = Array.isArray(res) ? res.length : 0
+    await loadApplicationStatus()
   } catch (e) {
     ElMessage.error('加载预约列表失败')
   } finally {
@@ -170,7 +201,7 @@ async function handleComplete(row) {
   }
   try {
     await completeBooking(row.id)
-    ElMessage.success('已标记为完成')
+    ElMessage.success('已标记为完成，现在可以发起合约申请')
     loadData()
   } catch (e) {
     ElMessage.error('操作失败')
@@ -229,9 +260,56 @@ function viewDetail(row) {
   detailVisible.value = true
 }
 
+async function showContractApplicationDialog(row) {
+  try {
+    await ElMessageBox.confirm(
+      '看房已完成，是否现在发起合约申请？\n\n系统将自动使用房源的租金和押金信息生成合同草稿，提交后房东审核通过即可开始签署流程。',
+      '发起合约申请',
+      { 
+        confirmButtonText: '确认申请',
+        cancelButtonText: '取消',
+        type: 'info',
+        distinguishCancelAndClose: true
+      }
+    )
+  } catch {
+    return
+  }
+  
+  try {
+    // 直接调用API创建合约申请，使用默认参数
+    await request.post('/api/v1/contract-applications/', {
+      booking_id: row.id,
+      start_date: new Date().toISOString(), // 使用当前日期作为开始日期
+      end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 默认一年
+      payment_method: '押一付三', // 默认付款方式
+      additional_notes: ''
+    })
+    
+    ElMessage.success('合约申请提交成功，请等待房东处理')
+    
+    // 更新本地状态，隐藏按钮
+    bookingWithApplications.value.add(row.id)
+    
+    loadData()
+  } catch (e) {
+    const msg = e.response?.data?.detail || '提交失败，请稍后重试'
+    ElMessage.error(msg)
+  }
+}
+
 onMounted(loadData)
 </script>
 
 <style scoped>
 .pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
+
+/* 让表格占满容器宽度 */
+:deep(.el-table) {
+  width: 100% !important;
+}
+
+:deep(.el-table__inner-wrapper) {
+  width: 100% !important;
+}
 </style>

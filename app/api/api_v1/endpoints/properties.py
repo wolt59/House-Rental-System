@@ -210,17 +210,17 @@ def update_property(
             )
     elif review_status == PropertyReviewStatus.APPROVED:
         # 已通过状态
-        if property_status in [PropertyStatus.RENTED, PropertyStatus.MAINTENANCE]:
-            # 已出租或维修中：只能修改描述
+        if property_status == PropertyStatus.RENTED:
+            # 已出租：只能修改描述
             allowed_fields = {"description"}
             disallowed = modified_fields - allowed_fields
             if disallowed:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Cannot modify fields when property is {property_status}. Only description can be updated."
+                    detail=f"Cannot modify fields when property is rented. Only description can be updated."
                 )
         else:
-            # published/unpublished/vacant：检查是否修改了核心字段
+            # published/unpublished：检查是否修改了核心字段
             core_fields_modified = modified_fields & CORE_PROPERTY_FIELDS
             if core_fields_modified:
                 # 修改了核心字段，标记需要修改审核状态
@@ -416,7 +416,7 @@ def change_property_status(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     if db_property.review_status != PropertyReviewStatus.APPROVED and current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot change property status before approval")
-    if status_in.status not in {PropertyStatus.VACANT, PropertyStatus.RENTED, PropertyStatus.MAINTENANCE}:
+    if status_in.status not in {PropertyStatus.PUBLISHED, PropertyStatus.RENTED}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid property status")
     db_property.status = status_in.status
     db.commit()
