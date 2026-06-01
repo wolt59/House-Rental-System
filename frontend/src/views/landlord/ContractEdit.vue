@@ -33,18 +33,19 @@
         :landlord-info="landlordInfo"
         :tenant-info="tenantInfo"
         :can-edit="true"
-        :can-sign="false"
+        :can-sign="canSign"
         :can-export-pdf="false"
         :show-actions="true"
         @field-change="handleFieldChange"
         @save-draft="handleSaveDraft"
+        @sign="handleSign"
       />
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ContractDocument from '../common/ContractDocument.vue'
@@ -59,6 +60,13 @@ const propertyInfo = ref(null)
 const landlordInfo = ref(null)
 const tenantInfo = ref(null)
 const loading = ref(false)
+
+// 是否可以签署（草稿和部分签署且房东未签署时可以签署）
+const canSign = computed(() => {
+  if (!contract.value) return false
+  return contract.value.status === 'draft' || 
+         (contract.value.status === 'part_signed' && !contract.value.signed_by_landlord)
+})
 
 // 加载合同数据
 async function loadContract() {
@@ -162,6 +170,11 @@ async function handleFieldChange({ field, value }) {
       showClose: true
     })
   }
+}
+
+// 处理签署 - 跳转到签署页面
+function handleSign() {
+  router.push(`/landlord/contract/${route.params.id}/sign`)
 }
 
 // 保存草稿

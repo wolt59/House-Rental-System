@@ -37,6 +37,7 @@
 
     <el-card v-loading="loading">
       <ContractDocument
+        ref="contractDocRef"
         v-if="contract"
         :contract="contract"
         :property-info="propertyInfo"
@@ -54,9 +55,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElLoading } from 'element-plus'
 import ContractDocument from '../common/ContractDocument.vue'
 import { getContract } from '../../api/contract'
 import request from '../../utils/request'
@@ -64,6 +65,7 @@ import request from '../../utils/request'
 const route = useRoute()
 const router = useRouter()
 
+const contractDocRef = ref(null)
 const contract = ref(null)
 const propertyInfo = ref(null)
 const landlordInfo = ref(null)
@@ -81,9 +83,7 @@ const canSign = computed(() => {
 // 是否可以导出PDF（只有签署后的合同才能导出）
 const canExportPDF = computed(() => {
   if (!contract.value) return false
-  return contract.value.status === 'active' || 
-         contract.value.status === 'part_signed' ||
-         contract.value.status === 'terminated'
+  return ['active', 'part_signed', 'terminated', 'expired'].includes(contract.value.status)
 })
 
 // 加载合同数据
@@ -135,6 +135,13 @@ async function loadContract() {
   } finally {
     loading.value = false
   }
+
+  if (route.query.export === 'pdf') {
+    await nextTick()
+    if (canExportPDF.value) {
+      await handleDownloadPDF()
+    }
+  }
 }
 
 // 处理签署 - 跳转到签署页面
@@ -142,10 +149,27 @@ function handleSign() {
   router.push(`/tenant/contract/${route.params.id}/sign`)
 }
 
-// 下载PDF
-function handleDownloadPDF() {
-  ElMessage.info('PDF导出功能开发中...')
-  // TODO: 实现PDF导出功能
+// 导出 PDF
+async function handleDownloadPDF() {
+  if (!contractDocRef.value) {
+    ElMessage.warning('合同内容加载中，请稍后再试')
+    return
+  }
+
+  const loadingInstance = ElLoading.service({
+    lock: true,
+    text: '正在生成 PDF...',
+    background: 'rgba(255, 255, 255, 0.7)',
+  })
+  try {
+    await contractDocRef.value.exportToPdf()
+    ElMessage.success('PDF 已下载')
+  } catch (e) {
+    console.error('PDF 导出失败:', e)
+    ElMessage.error('PDF 导出失败，请稍后重试')
+  } finally {
+    loadingInstance.close()
+  }
 }
 
 // 返回

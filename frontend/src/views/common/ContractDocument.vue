@@ -212,8 +212,17 @@
       <el-button v-if="canEdit" size="large" @click="$emit('save-draft')">
         保存草稿
       </el-button>
-      <el-button v-if="canExportPDF" size="large" @click="$emit('download-pdf')">
+      <el-button v-if="canExportPDF" type="success" size="large" @click="$emit('download-pdf')">
         下载PDF
+      </el-button>
+      <!-- 编辑模式下，如果是部分签署且房东未签署，显示签署按钮 -->
+      <el-button 
+        v-if="canEdit && contract?.status === 'part_signed' && !contract?.signed_by_landlord" 
+        type="primary" 
+        size="large" 
+        @click="$emit('sign')"
+      >
+        签署合同
       </el-button>
     </div>
   </div>
@@ -222,6 +231,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import dayjs from 'dayjs'
+import { exportContractPdf, buildContractPdfFilename } from '../../utils/exportContractPdf'
 
 const props = defineProps({
   contract: {
@@ -374,14 +384,19 @@ function formatDateTime(datetime) {
   return dayjs(datetime).format('YYYY-MM-DD HH:mm:ss')
 }
 
-// 打印合同
-function printContract() {
-  window.print()
+/** 导出为 PDF 并下载 */
+async function exportToPdf() {
+  if (!documentRef.value) {
+    throw new Error('合同内容未加载')
+  }
+  const filename = buildContractPdfFilename(props.contract)
+  await exportContractPdf(documentRef.value, { filename })
 }
 
 // 暴露方法供父组件调用
 defineExpose({
-  documentRef
+  documentRef,
+  exportToPdf,
 })
 </script>
 
@@ -552,21 +567,62 @@ defineExpose({
 
 /* 打印样式 */
 @media print {
-  .contract-actions {
-    display: none;
+  /* 隐藏所有不需要的元素 */
+  .contract-actions,
+  .page-header,
+  .page-container > *:not(.el-card),
+  .el-alert {
+    display: none !important;
   }
   
+  /* 优化合同文档打印样式 */
   .contract-document {
-    box-shadow: none;
-    padding: 0;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
   }
   
+  /* 确保可编辑字段显示为普通文本 */
   .editable-field {
-    border-bottom: none;
+    border-bottom: none !important;
   }
   
+  /* 确保章节不分页 */
   .contract-section {
     page-break-inside: avoid;
+  }
+  
+  /* 确保签名区域不分页 */
+  .signature-section {
+    page-break-inside: avoid;
+  }
+  
+  /* 隐藏Element Plus的加载和交互元素 */
+  .el-loading-mask,
+  .el-overlay {
+    display: none !important;
+  }
+  
+  /* 优化表格打印 */
+  table {
+    page-break-inside: auto;
+  }
+  
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  
+  /* 设置打印边距 */
+  @page {
+    margin: 2cm;
+    size: A4;
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
   }
 }
 
