@@ -22,20 +22,29 @@ def get_contract_change_requests(
     db: Session,
     contract_id: Optional[int] = None,
     initiator_id: Optional[int] = None,
+    tenant_id: Optional[int] = None,
+    landlord_id: Optional[int] = None,
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 20,
 ) -> List[ContractChangeRequest]:
     """获取合同变更申请列表"""
     query = db.query(ContractChangeRequest)
-    
+
     if contract_id is not None:
         query = query.filter(ContractChangeRequest.contract_id == contract_id)
     if initiator_id is not None:
         query = query.filter(ContractChangeRequest.initiator_id == initiator_id)
     if status is not None:
         query = query.filter(ContractChangeRequest.status == status)
-    
+
+    if tenant_id is not None or landlord_id is not None:
+        query = query.join(ContractChangeRequest.contract)
+        if tenant_id is not None:
+            query = query.filter(Contract.tenant_id == tenant_id)
+        if landlord_id is not None:
+            query = query.filter(Contract.landlord_id == landlord_id)
+
     return query.order_by(ContractChangeRequest.created_at.desc()).offset(skip).limit(limit).all()
 
 

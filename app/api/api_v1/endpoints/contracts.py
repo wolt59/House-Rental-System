@@ -1,11 +1,11 @@
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_current_active_admin, get_current_active_landlord, get_db
-from app.crud import crud_audit, crud_contract
+from app.crud import crud_audit, crud_contract, crud_message
 from app.models.contract import Contract
 from app.models.property import Property
 from app.models.message import Message
@@ -23,7 +23,9 @@ from app.core.enums import (
     PropertyReviewStatus,
     PropertyStatus,
     CANCELLABLE_STATUSES,
+    MessageType,
 )
+from app.api.websocket import ws_manager
 
 router = APIRouter()
 
@@ -34,9 +36,10 @@ def _send_message_to_user(
     to_user_id: int,
     content: str,
     property_id: Optional[int] = None,
-    message_type: str = "notification",
+    message_type: str = MessageType.NOTIFICATION.value,
+    background_tasks: Optional[BackgroundTasks] = None,
 ) -> None:
-    """发送系统消息给用户"""
+    """发送系统消息给用户（含 WebSocket 实时推送）"""
     message = Message(
         from_user_id=from_user_id,
         to_user_id=to_user_id,
@@ -46,12 +49,37 @@ def _send_message_to_user(
         message_type=message_type,
     )
     db.add(message)
+    db.flush()
+    db.refresh(message)
+
+    if background_tasks:
+        unread_before = crud_message.get_unread_count(db, user_id=to_user_id, message_type="notification")
+
+        async def notify_user():
+            payload = {
+                "type": "new_message",
+                "message": {
+                    "id": message.id,
+                    "from_user_id": message.from_user_id,
+                    "to_user_id": message.to_user_id,
+                    "content": message.content,
+                    "message_type": message.message_type,
+                    "property_id": message.property_id,
+                    "is_read": message.is_read,
+                    "created_at": message.created_at.isoformat() if message.created_at else None,
+                },
+                "unread_count": unread_before + 1,
+            }
+            await ws_manager.send_personal(payload, to_user_id)
+
+        background_tasks.add_task(notify_user)
 
 
 @router.post("/", response_model=ContractSchema, status_code=status.HTTP_201_CREATED)
 def create_contract(
     contract_in: ContractCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_landlord),
 ):
@@ -80,6 +108,7 @@ def create_contract(
         to_user_id=contract_in.tenant_id,
         content=f"房东为您创建了新的租赁合同（编号：{contract.contract_no}），请登录系统查看并签署。",
         property_id=contract_in.property_id,
+        background_tasks=background_tasks,
     )
     db.commit()
 
@@ -100,6 +129,7 @@ def create_contract(
 def auto_create_contract(
     contract_in: ContractAutoCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -146,6 +176,7 @@ def auto_create_contract(
         to_user_id=property_obj.owner_id,
         content=f"租客申请签约您的房源（{property_obj.title}），请登录系统查看并处理。",
         property_id=contract_in.property_id,
+        background_tasks=background_tasks,
     )
     db.commit()
 
@@ -255,6 +286,7 @@ def sign_contract_landlord(
     contract_id: int,
     sign_request: ContractSignRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_landlord),
 ):
@@ -299,6 +331,7 @@ def sign_contract_landlord(
             to_user_id=contract.tenant_id,
             content=f"租赁合同（编号：{contract.contract_no}）已由房东签署，合同正式生效。",
             property_id=contract.property_id,
+            background_tasks=background_tasks,
         )
     else:
         contract.status = ContractStatus.PART_SIGNED
@@ -310,6 +343,7 @@ def sign_contract_landlord(
             to_user_id=contract.tenant_id,
             content=f"房东已签署租赁合同（编号：{contract.contract_no}），请您登录系统完成签署。",
             property_id=contract.property_id,
+            background_tasks=background_tasks,
         )
 
     db.commit()
@@ -332,6 +366,7 @@ def sign_contract_tenant(
     contract_id: int,
     sign_request: ContractSignRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -351,8 +386,8 @@ def sign_contract_tenant(
             detail="房东尚未签署此合同，请等待房东先签署"
         )
     
-    # 只允许在部分签署状态下签署（即房东已签）
-    if contract.status not in [ContractStatus.PART_SIGNED]:
+    # 只允许在部分签署或待租客签署状态下签署（即房东已签）
+    if contract.status not in [ContractStatus.PART_SIGNED, ContractStatus.PENDING_TENANT_SIGN]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail="当前状态不允许签署，请等待房东先签署"
@@ -387,6 +422,7 @@ def sign_contract_tenant(
             to_user_id=contract.landlord_id,
             content=f"租赁合同（编号：{contract.contract_no}）已由租客签署，合同正式生效。",
             property_id=contract.property_id,
+            background_tasks=background_tasks,
         )
     else:
         contract.status = ContractStatus.PART_SIGNED
@@ -398,6 +434,7 @@ def sign_contract_tenant(
             to_user_id=contract.landlord_id,
             content=f"租客已签署租赁合同（编号：{contract.contract_no}），请您登录系统完成签署。",
             property_id=contract.property_id,
+            background_tasks=background_tasks,
         )
 
     db.commit()
@@ -419,6 +456,7 @@ def sign_contract_tenant(
 def withdraw_signature_landlord(
     contract_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_landlord),
 ):
@@ -438,6 +476,15 @@ def withdraw_signature_landlord(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+    _send_message_to_user(
+        db=db,
+        from_user_id=current_user.id,
+        to_user_id=contract.tenant_id,
+        content=f"房东已撤回对租赁合同（编号：{contract.contract_no}）的签署。",
+        property_id=contract.property_id,
+        background_tasks=background_tasks,
+    )
+
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
@@ -455,6 +502,7 @@ def withdraw_signature_landlord(
 def withdraw_signature_tenant(
     contract_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -474,6 +522,15 @@ def withdraw_signature_tenant(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+    _send_message_to_user(
+        db=db,
+        from_user_id=current_user.id,
+        to_user_id=contract.landlord_id,
+        content=f"租客已撤回对租赁合同（编号：{contract.contract_no}）的签署。",
+        property_id=contract.property_id,
+        background_tasks=background_tasks,
+    )
+
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
@@ -491,6 +548,7 @@ def withdraw_signature_tenant(
 def cancel_contract(
     contract_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -527,6 +585,7 @@ def cancel_contract(
         to_user_id=notify_user_id,
         content=f"租赁合同（编号：{contract.contract_no}）已被取消。",
         property_id=contract.property_id,
+        background_tasks=background_tasks,
     )
     db.commit()
 
@@ -548,6 +607,7 @@ def reject_contract(
     contract_id: int,
     reject_data: ContractReject,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -584,6 +644,7 @@ def reject_contract(
         to_user_id=notify_user_id,
         content=f"租赁合同（编号：{contract.contract_no}）已被拒绝。原因：{reject_data.reason or '未说明'}",
         property_id=contract.property_id,
+        background_tasks=background_tasks,
     )
     db.commit()
 
@@ -605,6 +666,7 @@ def terminate_contract(
     contract_id: int,
     terminate_data: ContractTerminate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -638,6 +700,7 @@ def terminate_contract(
         to_user_id=notify_user_id,
         content=f"租赁合同（编号：{contract.contract_no}）已终止。原因：{terminate_data.reason or '未说明'}",
         property_id=contract.property_id,
+        background_tasks=background_tasks,
     )
     db.commit()
     db.refresh(contract)

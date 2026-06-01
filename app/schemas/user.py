@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, constr
+from pydantic import BaseModel, EmailStr, constr, validator
 
 from app.schemas.common import UTCDatetimeModel
 
@@ -12,6 +12,12 @@ class UserBase(BaseModel):
     phone: Optional[str] = None
     full_name: Optional[str] = None
     role: Optional[str] = "tenant"
+
+    @validator("phone", "full_name", pre=True)
+    def empty_str_to_none(cls, v):
+        if v == "":
+            return None
+        return v
 
 
 class UserCreate(UserBase):

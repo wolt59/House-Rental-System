@@ -698,10 +698,9 @@ function getDaysRemainingType(row) {
 
 // 判断是否可以签约
 function canSign(row) {
-  // 房东可以在待签署状态下进行签署（租客未签署）
-  // 必须是 PENDING_SIGN（待签署）状态，且房东尚未签署
+  // 房东可以在待签署、部分签署或待房东签署状态下进行签署（房东尚未签署）
   return !row.signed_by_landlord && 
-         row.status === 'pending_sign'
+         (row.status === 'pending_sign' || row.status === 'part_signed' || row.status === 'pending_landlord_sign')
 }
 
 // 判断是否可以撤回签署

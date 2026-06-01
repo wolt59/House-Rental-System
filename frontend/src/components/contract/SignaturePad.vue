@@ -269,12 +269,13 @@ async function handleSubmit() {
     
     // 调用签署API
     const endpoint = props.userRole === 'landlord' 
-      ? `/contracts/${props.contractId}/sign/landlord`
-      : `/contracts/${props.contractId}/sign/tenant`
-    
+      ? `/api/v1/contracts/${props.contractId}/sign/landlord`
+      : `/api/v1/contracts/${props.contractId}/sign/tenant`
+
     await request.put(endpoint, {
       signature_image: signatureData,
-      password: form.value.password
+      ip_address: null,
+      device_info: navigator.userAgent
     })
     
     ElMessage.success('签署成功！')

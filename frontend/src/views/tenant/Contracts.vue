@@ -418,10 +418,10 @@ function handleTabChange(tab) {
 // 判断是否可以签约
 function canSign(row) {
   // 租客只能在房东已签署且租客未签署的情况下进行签署
-  // 必须是 PART_SIGNED（部分签署）状态，表示房东已签
+  // 可以是 PART_SIGNED 或 PENDING_TENANT_SIGN 状态
   return !row.signed_by_tenant && 
          row.signed_by_landlord &&
-         row.status === 'part_signed'
+         (row.status === 'part_signed' || row.status === 'pending_tenant_sign')
 }
 
 // 判断是否可以撤回签署

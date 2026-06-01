@@ -70,6 +70,8 @@ class ContractStatus(str, Enum):
     """合同状态枚举"""
     DRAFT = "draft"  # 草稿，可编辑
     PENDING_SIGN = "pending_sign"  # 待签署（双方都未签）
+    PENDING_LANDLORD_SIGN = "pending_landlord_sign"  # 待房东签署（租客已签，房东撤回后）
+    PENDING_TENANT_SIGN = "pending_tenant_sign"  # 待租客签署（房东已签，租客撤回后）
     PART_SIGNED = "part_signed"  # 一方已签署，内容已锁定
     ACTIVE = "active"  # 双方已签署，合同生效
     CHANGE_NEGOTIATING = "change_negotiating"  # 变更协商中
@@ -95,6 +97,8 @@ class MessageType(str, Enum):
 ACTIVE_OR_PENDING_STATUSES = [
     ContractStatus.DRAFT,
     ContractStatus.PENDING_SIGN,
+    ContractStatus.PENDING_LANDLORD_SIGN,
+    ContractStatus.PENDING_TENANT_SIGN,
     ContractStatus.PART_SIGNED,
     ContractStatus.ACTIVE,
 ]

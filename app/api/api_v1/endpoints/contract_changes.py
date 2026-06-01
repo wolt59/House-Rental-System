@@ -1,18 +1,63 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.models.user import User
+from app.models.message import Message as MessageModel
 from app.schemas.contract_change_request import (
     ContractChangeRequestCreate,
     ContractChangeRequestResponse,
     ContractChangeRequest as ContractChangeRequestSchema,
 )
-from app.crud import crud_contract_change
-from app.core.enums import UserRole
+from app.crud import crud_contract_change, crud_message
+from app.core.enums import UserRole, MessageType
+from app.api.websocket import ws_manager
 
 router = APIRouter()
+
+
+def _notify_user(
+    db: Session,
+    from_user_id: int,
+    to_user_id: int,
+    content: str,
+    property_id: Optional[int] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
+):
+    notification = MessageModel(
+        from_user_id=from_user_id,
+        to_user_id=to_user_id,
+        content=content,
+        property_id=property_id,
+        is_read=False,
+        message_type=MessageType.NOTIFICATION.value,
+    )
+    db.add(notification)
+    db.flush()
+    db.refresh(notification)
+
+    if background_tasks:
+        unread_before = crud_message.get_unread_count(db, user_id=to_user_id, message_type="notification")
+
+        async def notify():
+            payload = {
+                "type": "new_message",
+                "message": {
+                    "id": notification.id,
+                    "from_user_id": notification.from_user_id,
+                    "to_user_id": notification.to_user_id,
+                    "content": notification.content,
+                    "message_type": notification.message_type,
+                    "property_id": notification.property_id,
+                    "is_read": notification.is_read,
+                    "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                },
+                "unread_count": unread_before + 1,
+            }
+            await ws_manager.send_personal(payload, to_user_id)
+
+        background_tasks.add_task(notify)
 
 
 @router.post("/", response_model=ContractChangeRequestSchema, status_code=status.HTTP_201_CREATED)
@@ -20,6 +65,7 @@ def create_change_request(
     *,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    background_tasks: BackgroundTasks,
     request_in: ContractChangeRequestCreate,
 ):
     """发起合同变更申请"""
@@ -29,12 +75,26 @@ def create_change_request(
             initiator_id=current_user.id,
             request_in=request_in
         )
-        return change_request
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+    contract = change_request.contract
+    notify_user_id = contract.landlord_id if current_user.id == contract.tenant_id else contract.tenant_id
+    _notify_user(
+        db=db,
+        from_user_id=current_user.id,
+        to_user_id=notify_user_id,
+        content=f"合同（编号：{contract.contract_no}）的变更申请已发起，变更原因：{change_request.change_reason}，请登录系统查看并处理。",
+        property_id=contract.property_id,
+        background_tasks=background_tasks,
+    )
+
+    db.commit()
+    db.refresh(change_request)
+    return change_request
 
 
 @router.get("/", response_model=List[ContractChangeRequestSchema])
@@ -49,7 +109,6 @@ def list_change_requests(
 ):
     """获取合同变更申请列表"""
     if current_user.role == UserRole.TENANT:
-        # 租客查看自己发起或收到的申请
         requests = crud_contract_change.get_contract_change_requests(
             db=db,
             tenant_id=current_user.id,
@@ -59,7 +118,6 @@ def list_change_requests(
             limit=limit
         )
     elif current_user.role == UserRole.LANDLORD:
-        # 房东查看自己发起或收到的申请
         requests = crud_contract_change.get_contract_change_requests(
             db=db,
             landlord_id=current_user.id,
@@ -69,7 +127,6 @@ def list_change_requests(
             limit=limit
         )
     else:
-        # 管理员查看所有
         requests = crud_contract_change.get_contract_change_requests(
             db=db,
             contract_id=contract_id,
@@ -99,8 +156,7 @@ def get_change_request(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="合同变更申请不存在"
         )
-    
-    # 权限检查
+
     contract = change_request.contract
     if current_user.id not in [contract.tenant_id, contract.landlord_id]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权查看此申请")
@@ -113,6 +169,7 @@ def approve_change_request(
     *,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    background_tasks: BackgroundTasks,
     request_id: int,
     response_data: ContractChangeRequestResponse,
 ):
@@ -121,20 +178,19 @@ def approve_change_request(
         db=db,
         request_id=request_id
     )
-    
+
     if not change_request:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="合同变更申请不存在"
         )
-    
-    # 验证权限：只有合同另一方可以同意
+
     contract = change_request.contract
     if current_user.id == change_request.initiator_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="发起人不能审批自己的申请")
     if current_user.id not in [contract.tenant_id, contract.landlord_id]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权处理此申请")
-    
+
     try:
         change_request = crud_contract_change.approve_contract_change_request(
             db=db,
@@ -142,12 +198,24 @@ def approve_change_request(
             responder_id=current_user.id,
             response_opinion=response_data.opinion
         )
-        return change_request
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+    _notify_user(
+        db=db,
+        from_user_id=current_user.id,
+        to_user_id=change_request.initiator_id,
+        content=f"合同（编号：{contract.contract_no}）的变更申请已被同意。",
+        property_id=contract.property_id,
+        background_tasks=background_tasks,
+    )
+
+    db.commit()
+    db.refresh(change_request)
+    return change_request
 
 
 @router.post("/{request_id}/reject", response_model=ContractChangeRequestSchema)
@@ -155,6 +223,7 @@ def reject_change_request(
     *,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    background_tasks: BackgroundTasks,
     request_id: int,
     reason: str,
 ):
@@ -163,20 +232,19 @@ def reject_change_request(
         db=db,
         request_id=request_id
     )
-    
+
     if not change_request:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="合同变更申请不存在"
         )
-    
-    # 验证权限
+
     contract = change_request.contract
     if current_user.id == change_request.initiator_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="发起人不能审批自己的申请")
     if current_user.id not in [contract.tenant_id, contract.landlord_id]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权处理此申请")
-    
+
     try:
         change_request = crud_contract_change.reject_contract_change_request(
             db=db,
@@ -184,9 +252,21 @@ def reject_change_request(
             responder_id=current_user.id,
             reason=reason
         )
-        return change_request
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+    _notify_user(
+        db=db,
+        from_user_id=current_user.id,
+        to_user_id=change_request.initiator_id,
+        content=f"合同（编号：{contract.contract_no}）的变更申请已被拒绝。原因：{reason}",
+        property_id=contract.property_id,
+        background_tasks=background_tasks,
+    )
+
+    db.commit()
+    db.refresh(change_request)
+    return change_request

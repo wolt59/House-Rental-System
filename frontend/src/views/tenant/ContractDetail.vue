@@ -73,9 +73,10 @@ const loading = ref(false)
 // 是否可以签署
 const canSign = computed(() => {
   if (!contract.value) return false
-  // 只有未签署的合同才能签署，且必须是待签署或部分签署状态
+  // 租客只能在房东已签署且租客未签署的情况下签署
   return !contract.value.signed_by_tenant && 
-         (contract.value.status === 'pending_sign' || contract.value.status === 'part_signed')
+         contract.value.signed_by_landlord &&
+         (contract.value.status === 'part_signed' || contract.value.status === 'pending_tenant_sign')
 })
 
 // 是否可以导出PDF（只有签署后的合同才能导出）
