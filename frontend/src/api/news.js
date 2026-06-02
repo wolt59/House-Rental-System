@@ -23,3 +23,12 @@ export function updateNews(id, data) {
 export function deleteNews(id) {
   return request.delete(`/api/v1/news/${id}`)
 }
+
+// 管理员接口
+export function getAllNewsAdmin(params) {
+  return request.get('/api/v1/news/all', { params })
+}
+
+export function reviewNews(id, data) {
+  return request.post(`/api/v1/news/${id}/review`, data)
+}
