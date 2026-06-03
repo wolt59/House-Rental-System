@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_current_active_admin, get_current_active_landlord, get_db
-from app.crud import crud_audit, crud_contract, crud_message
+from app.crud import crud_audit, crud_contract, crud_payment
 from app.models.contract import Contract
 from app.models.property import Property
 from app.models.message import Message
@@ -257,8 +257,8 @@ def update_contract(
     if status_str in ["terminated", "cancelled", "rejected"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="已结束的合同不能修改")
 
-    # 对于DRAFT、PENDING_SIGN、PART_SIGNED状态，使用简化的更新方法
-    if status_str in ["draft", "pending_sign", "part_signed"]:
+    # 对于DRAFT、PENDING_SIGN、PENDING_LANDLORD_SIGN、PENDING_TENANT_SIGN、PART_SIGNED状态，使用简化的更新方法
+    if status_str in ["draft", "pending_sign", "pending_landlord_sign", "pending_tenant_sign", "part_signed"]:
         update_data = contract_in.model_dump(exclude_unset=True)
         try:
             updated = crud_contract.update_contract_editable_fields(db, contract, update_data)
@@ -323,6 +323,12 @@ def sign_contract_landlord(
         property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
         if property_obj:
             property_obj.status = PropertyStatus.RENTED
+
+        # 自动生成押金和租金账单
+        try:
+            crud_payment.generate_bills_for_contract(db, contract)
+        except Exception as e:
+            print(f"生成账单失败: {e}")
 
         # 通知租客合同已生效
         _send_message_to_user(
@@ -414,6 +420,12 @@ def sign_contract_tenant(
         property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
         if property_obj:
             property_obj.status = PropertyStatus.RENTED
+
+        # 自动生成押金和租金账单
+        try:
+            crud_payment.generate_bills_for_contract(db, contract)
+        except Exception as e:
+            print(f"生成账单失败: {e}")
 
         # 通知房东合同已生效
         _send_message_to_user(
@@ -687,6 +699,12 @@ def terminate_contract(
     property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
     if property_obj:
         property_obj.status = PropertyStatus.PUBLISHED
+
+    # 取消该合同未完成的账单
+    try:
+        crud_payment.cancel_bills_for_contract(db, contract.id)
+    except Exception as e:
+        print(f"取消账单失败: {e}")
 
     # 通知对方
     if current_user.id == contract.landlord_id:

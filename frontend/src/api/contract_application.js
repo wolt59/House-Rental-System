@@ -12,8 +12,8 @@ export function approveApplication(id, data) {
   return request.post(`/api/v1/contract-applications/${id}/approve`, data)
 }
 
-export function rejectApplication(id, data) {
-  return request.post(`/api/v1/contract-applications/${id}/reject`, data)
+export function rejectApplication(id, reason) {
+  return request.post(`/api/v1/contract-applications/${id}/reject`, null, { params: { reason } })
 }
 
 export function cancelApplication(id) {

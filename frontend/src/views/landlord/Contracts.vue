@@ -16,7 +16,49 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 合约申请表 -->
     <el-table
+      v-if="activeTab === 'applications'"
+      :data="displayContracts"
+      stripe
+      v-loading="loading"
+      class="contract-table"
+      table-layout="fixed"
+    >
+      <el-table-column label="房源" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">{{ propertyNames[row.property_id] || '加载中...' }}</template>
+      </el-table-column>
+      <el-table-column label="租客" width="96" show-overflow-tooltip>
+        <template #default="{ row }">{{ userNames[row.tenant_id] || '加载中...' }}</template>
+      </el-table-column>
+      <el-table-column label="期望租期" min-width="200">
+        <template #default="{ row }">{{ formatDate(row.start_date) }} ~ {{ formatDate(row.end_date) }}</template>
+      </el-table-column>
+      <el-table-column label="付款方式" width="100" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.payment_method || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="补充说明" min-width="120" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.additional_notes || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="状态" width="108" align="center">
+        <template #default="{ row }">
+          <el-tag :type="appStatusType(row.status)" size="small">{{ appStatusLabel(row.status) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" align="center" fixed="right" min-width="200">
+        <template #default="{ row }">
+          <template v-if="row.status === 'apply_pending'">
+            <el-button type="success" size="small" @click="handleApproveApp(row)">同意</el-button>
+            <el-button type="danger" size="small" @click="handleRejectApp(row)">拒绝</el-button>
+          </template>
+          <el-button size="small" @click="viewAppDetail(row)">详情</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <!-- 合同列表 -->
+    <el-table
+      v-else
       :data="displayContracts"
       stripe
       v-loading="loading"
@@ -78,8 +120,13 @@
             <el-button type="success" size="small" @click="handleSubmitDraft(row)">发起签署</el-button>
             <el-button type="info" size="small" @click="handleCancel(row)">取消</el-button>
           </template>
-          <template v-else-if="row.status === 'pending_sign'">
+          <template v-else-if="row.status === 'pending_sign' || row.status === 'pending_landlord_sign'">
             <el-button v-if="canSign(row)" type="primary" size="small" @click="handleSign(row)">签约</el-button>
+            <el-button v-if="canWithdraw(row)" type="warning" size="small" @click="handleWithdraw(row)">撤回</el-button>
+            <el-button type="danger" size="small" @click="handleReject(row)">拒绝</el-button>
+            <el-button type="info" size="small" @click="handleCancel(row)">取消</el-button>
+          </template>
+          <template v-else-if="row.status === 'pending_tenant_sign'">
             <el-button v-if="canWithdraw(row)" type="warning" size="small" @click="handleWithdraw(row)">撤回</el-button>
             <el-button type="danger" size="small" @click="handleReject(row)">拒绝</el-button>
             <el-button type="info" size="small" @click="handleCancel(row)">取消</el-button>
@@ -235,6 +282,60 @@
         <el-button type="danger" :loading="rejectingTermination" @click="confirmRejectTermination">确认拒绝</el-button>
       </template>
     </el-dialog>
+
+    <!-- 合约申请详情 -->
+    <el-dialog v-model="appDetailVisible" title="合约申请详情" width="600px">
+      <el-descriptions :column="2" border v-if="currentApplication">
+        <el-descriptions-item label="房源">{{ propertyNames[currentApplication.property_id] || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="appStatusType(currentApplication.status)" size="small">{{ appStatusLabel(currentApplication.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="期望开始日期">{{ formatDate(currentApplication.start_date) }}</el-descriptions-item>
+        <el-descriptions-item label="期望结束日期">{{ formatDate(currentApplication.end_date) }}</el-descriptions-item>
+        <el-descriptions-item label="付款方式">{{ currentApplication.payment_method || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="申请时间">{{ formatDate(currentApplication.created_at) }}</el-descriptions-item>
+        <el-descriptions-item v-if="currentApplication.landlord_response" label="房东回复" :span="2">
+          {{ currentApplication.landlord_response }}
+        </el-descriptions-item>
+        <el-descriptions-item label="补充说明" :span="2">{{ currentApplication.additional_notes || '-' }}</el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
+
+    <!-- 同意合约申请 -->
+    <el-dialog v-model="approveAppVisible" title="同意合约申请" width="500px">
+      <el-form :model="approveAppForm" label-width="80px">
+        <el-form-item label="回复内容">
+          <el-input
+            v-model="approveAppForm.response"
+            type="textarea"
+            :rows="3"
+            placeholder="可输入回复内容（可选）"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="approveAppVisible = false">取消</el-button>
+        <el-button type="success" :loading="approvingApp" @click="confirmApproveApp">确认同意</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 拒绝合约申请 -->
+    <el-dialog v-model="rejectAppVisible" title="拒绝合约申请" width="500px">
+      <el-form :model="rejectAppForm" label-width="80px">
+        <el-form-item label="拒绝原因" required>
+          <el-input
+            v-model="rejectAppForm.reason"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入拒绝原因"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rejectAppVisible = false">取消</el-button>
+        <el-button type="danger" :loading="rejectingApp" @click="confirmRejectApp">确认拒绝</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -247,6 +348,11 @@ import {
   cancelContract,
   rejectContract,
 } from '../../api/contract'
+import {
+  getApplications,
+  approveApplication,
+  rejectApplication,
+} from '../../api/contract_application'
 import {
   createTerminationRequest,
   getTerminationRequests,
@@ -261,6 +367,8 @@ import {
   useContractTableColumns,
   statusLabel,
   statusType,
+  appStatusLabel,
+  appStatusType,
   getDaysRemaining,
   getDaysRemainingType,
 } from '../../composables/useContractListTabs'
@@ -270,8 +378,9 @@ const { resolveItems, userNames, propertyNames } = useNameResolver()
 
 const activeTab = ref('all')
 const contracts = ref([])
+const applications = ref([])
 const loading = ref(false)
-const { tabCounts, contractsForTab } = useContractListTabs(contracts)
+const { tabCounts, contractsForTab } = useContractListTabs(contracts, applications)
 
 const displayContracts = computed(() => contractsForTab(activeTab.value))
 const tableColumns = useContractTableColumns(activeTab)
@@ -309,13 +418,11 @@ function formatDate(d) {
 }
 
 function canSign(row) {
-// 房东可以在待签署、部分签署或待房东签署状态下进行签署（房东尚未签署）
-  return !row.signed_by_landlord && 
-         (row.status === 'pending_sign' || row.status === 'part_signed' || row.status === 'pending_landlord_sign')
+  return !row.signed_by_landlord && ['pending_sign', 'pending_landlord_sign', 'part_signed'].includes(row.status)
 }
 
 function canWithdraw(row) {
-  return row.signed_by_landlord && (row.status === 'part_signed' || row.status === 'pending_sign')
+  return row.signed_by_landlord && ['pending_tenant_sign', 'part_signed'].includes(row.status)
 }
 
 async function loadData() {
@@ -326,17 +433,25 @@ async function loadData() {
     await resolveItems(contracts.value, ['tenant_id', 'property_id'])
   } catch {
     ElMessage.error('加载合同列表失败')
+  }
+  // 同时加载合约申请
+  try {
+    const appRes = await getApplications({ skip: 0, limit: 100 })
+    applications.value = Array.isArray(appRes) ? appRes : []
+    await resolveItems(applications.value, ['tenant_id', 'property_id'])
+  } catch {
+    // 静默处理，不影响合同列表
   } finally {
     loading.value = false
   }
 }
 
 function handleSign(row) {
-  router.push(`/landlord/contract/${row.id}/sign`)
+  router.push(`/landlord/contract/${row.id}/edit?mode=sign`)
 }
 
 function handleSubmitDraft(row) {
-  router.push(`/landlord/contract/${row.id}/sign`)
+  router.push(`/landlord/contract/${row.id}/edit?mode=sign`)
 }
 
 async function handleWithdraw(row) {
@@ -499,6 +614,65 @@ async function confirmRejectTermination() {
     ElMessage.error(e.response?.data?.detail || '拒绝解约失败')
   } finally {
     rejectingTermination.value = false
+  }
+}
+
+// 合约申请相关
+const approveAppVisible = ref(false)
+const rejectAppVisible = ref(false)
+const appDetailVisible = ref(false)
+const approvingApp = ref(false)
+const rejectingApp = ref(false)
+const currentApplication = ref(null)
+const approveAppForm = reactive({ response: '' })
+const rejectAppForm = reactive({ reason: '' })
+
+function viewAppDetail(row) {
+  currentApplication.value = row
+  appDetailVisible.value = true
+}
+
+function handleApproveApp(row) {
+  currentApplication.value = row
+  approveAppForm.response = ''
+  approveAppVisible.value = true
+}
+
+async function confirmApproveApp() {
+  approvingApp.value = true
+  try {
+    await approveApplication(currentApplication.value.id, { approved: true, response: approveAppForm.response })
+    ElMessage.success('已同意合约申请，合同草稿已生成')
+    approveAppVisible.value = false
+    loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '操作失败')
+  } finally {
+    approvingApp.value = false
+  }
+}
+
+function handleRejectApp(row) {
+  currentApplication.value = row
+  rejectAppForm.reason = ''
+  rejectAppVisible.value = true
+}
+
+async function confirmRejectApp() {
+  if (!rejectAppForm.reason) {
+    ElMessage.warning('请输入拒绝原因')
+    return
+  }
+  rejectingApp.value = true
+  try {
+    await rejectApplication(currentApplication.value.id, rejectAppForm.reason)
+    ElMessage.success('已拒绝合约申请')
+    rejectAppVisible.value = false
+    loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '操作失败')
+  } finally {
+    rejectingApp.value = false
   }
 }
 

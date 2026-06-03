@@ -68,4 +68,5 @@ class Property(Base):
     messages = relationship("Message", back_populates="property")
     contracts = relationship("Contract", back_populates="property")
     contract_applications = relationship("ContractApplication", back_populates="property")
+    payments = relationship("Payment", foreign_keys="Payment.property_id", back_populates="property")
     images = relationship("PropertyImage", back_populates="property", order_by="PropertyImage.sort_order")

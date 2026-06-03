@@ -51,6 +51,9 @@
               <el-menu-item index="/admin/news">
                 <el-icon><Document /></el-icon><span>新闻审核</span>
               </el-menu-item>
+              <el-menu-item index="/admin/payments">
+                <el-icon><Money /></el-icon><span>账单管理</span>
+              </el-menu-item>
               <el-menu-item index="/admin/messages">
                 <el-icon><ChatDotRound /></el-icon>
                 <span>消息中心</span>
@@ -98,7 +101,7 @@
                   <el-icon><DocumentChecked /></el-icon><span>我的合同</span>
                 </el-menu-item>
                 <el-menu-item index="/tenant/payments">
-                  <el-icon><Money /></el-icon><span>租金支付</span>
+                  <el-icon><Money /></el-icon><span>我的账单</span>
                 </el-menu-item>
                 <el-menu-item index="/tenant/maintenance">
                   <el-icon><Tools /></el-icon><span>维修申请</span>

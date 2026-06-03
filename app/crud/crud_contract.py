@@ -119,7 +119,7 @@ def withdraw_signature(db: Session, contract: Contract, user_role: str) -> Contr
         raise ValueError("当前状态的合同不允许撤回签署")
     
     # 只有部分签署或待签约状态才能撤回
-    if contract.status not in [ContractStatus.PART_SIGNED, ContractStatus.PENDING_SIGN]:
+    if contract.status not in [ContractStatus.PART_SIGNED, ContractStatus.PENDING_SIGN, ContractStatus.PENDING_LANDLORD_SIGN, ContractStatus.PENDING_TENANT_SIGN]:
         raise ValueError("当前状态不允许撤回签署")
 
     if user_role == "landlord":
@@ -247,13 +247,16 @@ def update_contract_editable_fields(
     # 将合同状态转换为字符串进行比较
     status_str = str(contract.status) if contract.status else ""
     
-    # 允许编辑的状态：draft 或 part_signed且房东未签署
+    # 允许编辑的状态：draft 或 pending_landlord_sign 或 part_signed且房东未签署
+    editable_statuses = ["draft", "pending_landlord_sign"]
     if status_str == "draft":
         pass  # 允许编辑
+    elif status_str == "pending_landlord_sign" and not contract.signed_by_landlord:
+        pass  # 允许编辑（房东尚未签署）
     elif status_str == "part_signed" and not contract.signed_by_landlord:
         pass  # 允许编辑（房东未签署）
     else:
-        raise ValueError("只有草稿状态或部分签署状态（房东未签署）的合同可以编辑")
+        raise ValueError("只有草稿状态或未签署状态下的合同可以编辑")
     
     # 允许编辑的字段列表
     allowed_fields = [

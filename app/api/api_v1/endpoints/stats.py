@@ -52,9 +52,9 @@ def admin_dashboard(db: Session = Depends(get_db), current_user=Depends(get_curr
     total_contracts = db.query(func.count(Contract.id)).scalar()
     active_contracts = db.query(func.count(Contract.id)).filter(Contract.status == ContractStatus.ACTIVE).scalar()
     total_payments = db.query(func.count(Payment.id)).scalar()
-    paid_payments = db.query(func.count(Payment.id)).filter(Payment.status == PaymentStatus.PAID).scalar()
+    paid_payments = db.query(func.count(Payment.id)).filter(Payment.status == PaymentStatus.CONFIRMED).scalar()
     pending_payments = db.query(func.count(Payment.id)).filter(Payment.status == PaymentStatus.PENDING).scalar()
-    total_rent_income = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(Payment.status == PaymentStatus.PAID).scalar()
+    total_rent_income = db.query(func.coalesce(func.sum(func.coalesce(Payment.actual_amount, Payment.due_amount)), 0)).filter(Payment.status == PaymentStatus.CONFIRMED).scalar()
     total_bookings = db.query(func.count(Booking.id)).scalar()
     pending_bookings = db.query(func.count(Booking.id)).filter(Booking.status == BookingStatus.PENDING).scalar()
     open_maintenance = db.query(func.count(MaintenanceRequest.id)).filter(MaintenanceRequest.status == MaintenanceStatus.NEW).scalar()
@@ -91,9 +91,9 @@ def get_monthly_income(db: Session = Depends(get_db), current_user=Depends(get_c
         db.query(
             extract('year', Payment.created_at).label('year'),
             extract('month', Payment.created_at).label('month'),
-            func.coalesce(func.sum(Payment.amount), 0).label('total_amount')
+            func.coalesce(func.sum(Payment.due_amount), 0).label('total_amount')
         )
-        .filter(Payment.status == "paid", Payment.created_at >= six_months_ago)
+        .filter(Payment.status == "confirmed", Payment.created_at >= six_months_ago)
         .group_by('year', 'month')
         .order_by('year', 'month')
         .all()
@@ -165,11 +165,11 @@ def landlord_dashboard(db: Session = Depends(get_db), current_user=Depends(get_c
 
     occupancy_rate = round(rented_properties / total_properties * 100, 1) if total_properties > 0 else 0
 
-    total_income = db.query(func.coalesce(func.sum(Payment.amount), 0)).join(
+    total_income = db.query(func.coalesce(func.sum(func.coalesce(Payment.actual_amount, Payment.due_amount)), 0)).join(
         Contract, Payment.contract_id == Contract.id
     ).filter(
         Contract.landlord_id == landlord_id,
-        Payment.status == "paid"
+        Payment.status == "confirmed"
     ).scalar()
 
     pending_bookings = db.query(func.count(Booking.id)).join(
@@ -225,12 +225,12 @@ def get_landlord_monthly_income(db: Session = Depends(get_db), current_user=Depe
         db.query(
             extract('year', Payment.created_at).label('year'),
             extract('month', Payment.created_at).label('month'),
-            func.coalesce(func.sum(Payment.amount), 0).label('total_amount')
+            func.coalesce(func.sum(Payment.due_amount), 0).label('total_amount')
         )
         .join(Contract, Payment.contract_id == Contract.id)
         .filter(
             Contract.landlord_id == landlord_id,
-            Payment.status == "paid",
+            Payment.status == "confirmed",
             Payment.created_at >= six_months_ago
         )
         .group_by('year', 'month')

@@ -3,6 +3,8 @@ import { computed } from 'vue'
 export const CONTRACT_STATUS_LABELS = {
   draft: '草稿',
   pending_sign: '待签约',
+  pending_landlord_sign: '待房东签署',
+  pending_tenant_sign: '待租客签署',
   part_signed: '部分签署',
   active: '生效中',
   change_negotiating: '变更协商中',
@@ -16,6 +18,8 @@ export const CONTRACT_STATUS_LABELS = {
 export const CONTRACT_STATUS_TYPES = {
   draft: 'info',
   pending_sign: 'warning',
+  pending_landlord_sign: 'warning',
+  pending_tenant_sign: 'warning',
   part_signed: 'warning',
   active: 'success',
   change_negotiating: 'warning',
@@ -26,8 +30,31 @@ export const CONTRACT_STATUS_TYPES = {
   expired: 'info',
 }
 
+export const APPLICATION_STATUS_LABELS = {
+  apply_pending: '待房东确认',
+  apply_approved: '已同意',
+  apply_rejected: '已拒绝',
+  apply_cancelled: '已取消',
+}
+
+export const APPLICATION_STATUS_TYPES = {
+  apply_pending: 'warning',
+  apply_approved: 'success',
+  apply_rejected: 'danger',
+  apply_cancelled: 'info',
+}
+
+export function appStatusLabel(s) {
+  return APPLICATION_STATUS_LABELS[s] || s
+}
+
+export function appStatusType(s) {
+  return APPLICATION_STATUS_TYPES[s] || 'info'
+}
+
 /** Tab 定义：name 为 el-tab-pane 的 name，filter 用于客户端筛选 */
 export const CONTRACT_TABS = [
+  { name: 'applications', label: '合约申请' },
   { name: 'all', label: '全部合同' },
   { name: 'draft', label: '草稿' },
   { name: 'pending_sign', label: '待签署' },
@@ -63,7 +90,7 @@ function isEnded(c) {
 const TAB_FILTERS = {
   all: () => true,
   draft: (c) => c.status === 'draft',
-  pending_sign: (c) => c.status === 'pending_sign' || c.status === 'part_signed',
+  pending_sign: (c) => c.status === 'pending_sign' || c.status === 'pending_landlord_sign' || c.status === 'pending_tenant_sign' || c.status === 'part_signed',
   active: isActiveNotExpired,
   expiring: isExpiringSoon,
   ended: isEnded,
@@ -92,18 +119,26 @@ export function getDaysRemainingType(row) {
   return 'success'
 }
 
-export function useContractListTabs(contractsRef) {
+export function useContractListTabs(contractsRef, applicationsRef) {
   const tabCounts = computed(() => {
     const list = contractsRef.value || []
+    const apps = applicationsRef?.value || []
     const counts = {}
     for (const tab of CONTRACT_TABS) {
-      const filter = TAB_FILTERS[tab.name]
-      counts[tab.name] = filter ? list.filter(filter).length : 0
+      if (tab.name === 'applications') {
+        counts.applications = apps.length
+      } else {
+        const filter = TAB_FILTERS[tab.name]
+        counts[tab.name] = filter ? list.filter(filter).length : 0
+      }
     }
     return counts
   })
 
   function contractsForTab(tabName) {
+    if (tabName === 'applications') {
+      return applicationsRef?.value || []
+    }
     const list = contractsRef.value || []
     const filter = TAB_FILTERS[tabName]
     return filter ? list.filter(filter) : list
@@ -119,15 +154,17 @@ export function useContractTableColumns(activeTabRef) {
     const simpleActions = tab === 'expiring' || tab === 'ended'
 
     return {
-      showLeasePeriod: ['all', 'active', 'ended'].includes(tab),
+      showLeasePeriod: ['all', 'active', 'ended', 'applications'].includes(tab),
       showExpiringEndDate: tab === 'expiring',
       showDaysRemaining: tab === 'expiring',
-      showStatus: ['all', 'ended'].includes(tab),
+      showStatus: ['all', 'ended', 'applications'].includes(tab),
       showSignColumns: tab === 'pending_sign',
+      isApplication: tab === 'applications',
       operationWidth: simpleActions ? 108 : undefined,
       operationMinWidth: simpleActions
         ? undefined
         : {
+            applications: 200,
             draft: 280,
             pending_sign: 320,
             active: 200,

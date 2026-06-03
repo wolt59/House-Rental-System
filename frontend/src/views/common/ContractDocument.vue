@@ -397,6 +397,7 @@ async function exportToPdf() {
 defineExpose({
   documentRef,
   exportToPdf,
+  editableFields,  // 暴露当前可编辑字段值，用于保存草稿时收集所有字段
 })
 </script>
 

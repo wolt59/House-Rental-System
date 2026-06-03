@@ -17,11 +17,22 @@ class PropertyStatus(str, Enum):
     RENTED = "rented"  # 已出租（有生效合同）
 
 
+class BillType(str, Enum):
+    """账单类型枚举"""
+    RENT = "rent"  # 租金
+    DEPOSIT = "deposit"  # 押金
+    UTILITY = "utility"  # 水电费
+    MAINTENANCE = "maintenance"  # 维修费
+    OTHER = "other"  # 其他
+
+
 class PaymentStatus(str, Enum):
     """支付状态枚举"""
     PENDING = "pending"  # 待支付
-    PAID = "paid"  # 已支付
-    OVERDUE = "overdue"  # 逾期
+    SUBMITTED = "submitted"  # 已提交付款
+    CONFIRMED = "confirmed"  # 已确认收款
+    REJECTED = "rejected"  # 已驳回
+    OVERDUE = "overdue"  # 已逾期
     CANCELLED = "cancelled"  # 已取消
 
 
@@ -70,21 +81,25 @@ class ContractStatus(str, Enum):
     """合同状态枚举"""
     DRAFT = "draft"  # 草稿，可编辑
     PENDING_SIGN = "pending_sign"  # 待签署（双方都未签）
-    PENDING_LANDLORD_SIGN = "pending_landlord_sign"  # 待房东签署（租客已签，房东撤回后）
-    PENDING_TENANT_SIGN = "pending_tenant_sign"  # 待租客签署（房东已签，租客撤回后）
     PART_SIGNED = "part_signed"  # 一方已签署，内容已锁定
+    PENDING_LANDLORD_SIGN = "pending_landlord_sign"  # 待房东签署（租客已签/撤回后）
+    PENDING_TENANT_SIGN = "pending_tenant_sign"  # 待租客签署（房东已签/撤回后）
     ACTIVE = "active"  # 双方已签署，合同生效
     CHANGE_NEGOTIATING = "change_negotiating"  # 变更协商中
     TERMINATE_NEGOTIATING = "terminate_negotiating"  # 解约协商中
     TERMINATED = "terminated"  # 已提前解约
     EXPIRED = "expired"  # 已到期
     CANCELLED = "cancelled"  # 已取消
+    REJECTED = "rejected"  # 已拒绝
 
 
 # 可取消的合同状态（草稿或待签署状态）
 CANCELLABLE_STATUSES = [
     ContractStatus.DRAFT,
     ContractStatus.PENDING_SIGN,
+    ContractStatus.PENDING_TENANT_SIGN,
+    ContractStatus.PENDING_LANDLORD_SIGN,
+    ContractStatus.PART_SIGNED,
 ]
 
 class MessageType(str, Enum):

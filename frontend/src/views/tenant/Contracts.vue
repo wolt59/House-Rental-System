@@ -16,7 +16,45 @@
       </el-tab-pane>
     </el-tabs>
 
+    <!-- 合约申请表 -->
     <el-table
+      v-if="activeTab === 'applications'"
+      :data="displayContracts"
+      stripe
+      v-loading="loading"
+      class="contract-table"
+      table-layout="fixed"
+    >
+      <el-table-column label="房源" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">{{ propertyNames[row.property_id] || '加载中...' }}</template>
+      </el-table-column>
+      <el-table-column label="房东" width="96" show-overflow-tooltip>
+        <template #default="{ row }">{{ userNames[row.landlord_id] || '加载中...' }}</template>
+      </el-table-column>
+      <el-table-column label="期望租期" min-width="200">
+        <template #default="{ row }">{{ formatDate(row.start_date) }} ~ {{ formatDate(row.end_date) }}</template>
+      </el-table-column>
+      <el-table-column label="付款方式" width="100" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.payment_method || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="状态" width="108" align="center">
+        <template #default="{ row }">
+          <el-tag :type="appStatusType(row.status)" size="small">{{ appStatusLabel(row.status) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" align="center" fixed="right" min-width="160">
+        <template #default="{ row }">
+          <template v-if="row.status === 'apply_pending'">
+            <el-button type="info" size="small" @click="handleCancelApp(row)">取消</el-button>
+          </template>
+          <el-button size="small" @click="viewAppDetail(row)">详情</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <!-- 合同列表 -->
+    <el-table
+      v-else
       :data="displayContracts"
       stripe
       v-loading="loading"
@@ -156,6 +194,33 @@
         <el-button type="danger" :loading="rejectingTermination" @click="confirmRejectTermination">确认拒绝</el-button>
       </template>
     </el-dialog>
+
+    <!-- 合约申请详情 -->
+    <el-dialog v-model="appDetailVisible" title="合约申请详情" width="600px">
+      <el-descriptions :column="2" border v-if="currentApplication">
+        <el-descriptions-item label="房源">{{ propertyNames[currentApplication.property_id] || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="appStatusType(currentApplication.status)" size="small">{{ appStatusLabel(currentApplication.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="期望开始日期">{{ formatDate(currentApplication.start_date) }}</el-descriptions-item>
+        <el-descriptions-item label="期望结束日期">{{ formatDate(currentApplication.end_date) }}</el-descriptions-item>
+        <el-descriptions-item label="付款方式">{{ currentApplication.payment_method || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="申请时间">{{ formatDate(currentApplication.created_at) }}</el-descriptions-item>
+        <el-descriptions-item v-if="currentApplication.landlord_response" label="房东回复" :span="2">
+          {{ currentApplication.landlord_response }}
+        </el-descriptions-item>
+        <el-descriptions-item label="补充说明" :span="2">{{ currentApplication.additional_notes || '-' }}</el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
+
+    <!-- 取消合约申请确认 -->
+    <el-dialog v-model="cancelAppVisible" title="取消合约申请" width="400px">
+      <p>确定取消此合约申请？取消后房东将无法查看该申请。</p>
+      <template #footer>
+        <el-button @click="cancelAppVisible = false">返回</el-button>
+        <el-button type="danger" :loading="cancellingApp" @click="confirmCancelApp">确认取消</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -169,6 +234,10 @@ import {
   rejectContract,
 } from '../../api/contract'
 import {
+  getApplications,
+  cancelApplication,
+} from '../../api/contract_application'
+import {
   getTerminationRequests,
   approveTerminationRequest,
   rejectTerminationRequest,
@@ -181,6 +250,8 @@ import {
   useContractTableColumns,
   statusLabel,
   statusType,
+  appStatusLabel,
+  appStatusType,
   getDaysRemaining,
   getDaysRemainingType,
 } from '../../composables/useContractListTabs'
@@ -190,8 +261,9 @@ const { resolveItems, userNames, propertyNames } = useNameResolver()
 
 const activeTab = ref('all')
 const contracts = ref([])
+const applications = ref([])
 const loading = ref(false)
-const { tabCounts, contractsForTab } = useContractListTabs(contracts)
+const { tabCounts, contractsForTab } = useContractListTabs(contracts, applications)
 
 const displayContracts = computed(() => contractsForTab(activeTab.value))
 const tableColumns = useContractTableColumns(activeTab)
@@ -238,6 +310,14 @@ async function loadData() {
     await resolveItems(contracts.value, ['landlord_id', 'property_id'])
   } catch {
     ElMessage.error('加载合同列表失败')
+  }
+  // 同时加载合约申请
+  try {
+    const appRes = await getApplications({ skip: 0, limit: 100 })
+    applications.value = Array.isArray(appRes) ? appRes : []
+    await resolveItems(applications.value, ['landlord_id', 'property_id'])
+  } catch {
+    // 静默处理
   } finally {
     loading.value = false
   }
@@ -363,6 +443,36 @@ async function confirmRejectTermination() {
     ElMessage.error(e.response?.data?.detail || '拒绝解约失败')
   } finally {
     rejectingTermination.value = false
+  }
+}
+
+// 合约申请相关
+const cancelAppVisible = ref(false)
+const cancellingApp = ref(false)
+const currentApplication = ref(null)
+const appDetailVisible = ref(false)
+
+function viewAppDetail(row) {
+  currentApplication.value = row
+  appDetailVisible.value = true
+}
+
+function handleCancelApp(row) {
+  currentApplication.value = row
+  cancelAppVisible.value = true
+}
+
+async function confirmCancelApp() {
+  cancellingApp.value = true
+  try {
+    await cancelApplication(currentApplication.value.id)
+    ElMessage.success('已取消合约申请')
+    cancelAppVisible.value = false
+    loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || '操作失败')
+  } finally {
+    cancellingApp.value = false
   }
 }
 
