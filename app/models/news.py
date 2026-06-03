@@ -14,7 +14,8 @@ class News(Base):
     content = Column(Text, nullable=False)
     category = Column(String(50), nullable=True)
     cover_image = Column(String(500), nullable=True)
-    status = Column(String(50), default="draft")
+    status = Column(String(50), default="draft")  # draft | published | rejected
+    review_message = Column(Text, nullable=True)   # 审核意见（拒绝原因等）
     view_count = Column(Integer, default=0)
     published_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

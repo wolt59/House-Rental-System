@@ -48,6 +48,9 @@
               <el-menu-item index="/admin/audit-logs">
                 <el-icon><Notebook /></el-icon><span>审计日志</span>
               </el-menu-item>
+              <el-menu-item index="/admin/news">
+                <el-icon><Document /></el-icon><span>新闻审核</span>
+              </el-menu-item>
               <el-menu-item index="/admin/messages">
                 <el-icon><ChatDotRound /></el-icon>
                 <span>消息中心</span>

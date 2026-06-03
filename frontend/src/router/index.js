@@ -67,6 +67,7 @@ const routes = [
           { path: 'users', name: 'AdminUsers', component: () => import('../views/admin/Users.vue') },
           { path: 'properties', name: 'AdminProperties', component: () => import('../views/admin/Properties.vue') },
           { path: 'audit-logs', name: 'AdminAuditLogs', component: () => import('../views/admin/AuditLogs.vue') },
+          { path: 'news', name: 'AdminNews', component: () => import('../views/admin/News.vue') },
           { path: 'messages', name: 'AdminMessages', component: () => import('../views/common/Chat.vue') },
           { path: 'notifications', name: 'AdminNotifications', component: () => import('../views/common/Notifications.vue') },
         ],
