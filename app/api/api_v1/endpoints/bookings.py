@@ -68,8 +68,7 @@ def create_booking(booking_in: BookingCreate, background_tasks: BackgroundTasks,
             link=link,
         )
         db.add(notification)
-        db.commit()
-
+        db.flush()
         unread_before = crud_message.get_unread_count(db, user_id=landlord.id)
 
         async def notify_landlord():
@@ -190,8 +189,7 @@ def approve_booking(booking_id: int, background_tasks: BackgroundTasks, request:
             link=link,
         )
         db.add(notification)
-        db.commit()
-
+        db.flush()
         unread_before = crud_message.get_unread_count(db, user_id=tenant.id)
 
         async def notify_tenant():
@@ -253,8 +251,7 @@ def reject_booking(booking_id: int, reason: str, background_tasks: BackgroundTas
             link=link,
         )
         db.add(notification)
-        db.commit()
-
+        db.flush()
         unread_before = crud_message.get_unread_count(db, user_id=tenant.id)
 
         async def notify_tenant():
@@ -313,8 +310,7 @@ def reschedule_booking(booking_id: int, reschedule: BookingReschedule, backgroun
             link=link,
         )
         db.add(notification)
-        db.commit()
-
+        db.flush()
         unread_before = crud_message.get_unread_count(db, user_id=tenant.id)
 
         async def notify_tenant():
@@ -373,16 +369,14 @@ def respond_reschedule(booking_id: int, response: BookingRescheduleResponse, req
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid response")
     
-    db.commit()
-    db.refresh(booking)
-    
+    booking_id = booking.id
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
         action="respond_reschedule",
         target_type="booking",
-        target_id=booking.id,
+        target_id=booking_id,
         detail=f"Reschedule response: {response.response}",
         ip_address=ip_address,
     )
@@ -425,9 +419,6 @@ def show_contact_info(booking_id: int, request: Request, db: Session = Depends(g
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Contact info only available for approved bookings")
     
     booking.landlord_contact_shown = 1
-    db.commit()
-    db.refresh(booking)
-    
     return booking
 
 
@@ -441,15 +432,15 @@ def delete_booking(booking_id: int, request: Request, db: Session = Depends(get_
     if current_user.role == "tenant" and booking.status not in [BookingStatus.PENDING, BookingStatus.CANCELLED, BookingStatus.REJECTED]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete this booking")
 
+    booking_id = booking.id
     db.delete(booking)
-    db.commit()
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
         action="delete_booking",
         target_type="booking",
-        target_id=booking.id,
+        target_id=booking_id,
         detail="Booking deleted",
         ip_address=ip_address,
     )
