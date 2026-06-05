@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 import os
 import uuid
@@ -8,11 +9,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.api_v1.api import api_router
 from app.api.websocket import ws_manager
+from app.cache.redis_client import close_redis, is_redis_available
 from app.core.config import settings
 from app.core.security import decode_access_token
 from app.crud import crud_user
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
+
+logger = logging.getLogger("hrs")
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(os.path.join(UPLOAD_DIR, "images"), exist_ok=True)
@@ -21,11 +25,23 @@ os.makedirs(os.path.join(UPLOAD_DIR, "videos"), exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 启动时：初始化数据库
     try:
         Base.metadata.create_all(bind=engine)
     except Exception:
         pass
+
+    # 启动时：检查 Redis 连接
+    if settings.CACHE_ENABLED:
+        if is_redis_available():
+            logger.info("Redis 缓存已启用: %s", settings.REDIS_URL)
+        else:
+            logger.warning("Redis 连接失败，缓存功能已自动降级，应用仍可正常运行")
+
     yield
+
+    # 关闭时：释放 Redis 连接池
+    close_redis()
 
 
 def create_app() -> FastAPI:

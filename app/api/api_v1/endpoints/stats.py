@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
 from app.api.deps import get_current_active_admin, get_current_active_landlord, get_db
+from app.cache import cache_manager, CacheKey
+from app.core.config import settings
 from app.models.property import Property
 from app.models.contract import Contract
 from app.models.payment import Payment
@@ -20,6 +22,11 @@ router = APIRouter()
 
 @router.get("/regions", response_model=List[RegionStats])
 def search_by_region(db: Session = Depends(get_db)):
+    cache_key = CacheKey.stats("regions")
+    return cache_manager.get_or_set(cache_key, lambda: _query_regions(db), ttl=settings.CACHE_LONG_TTL)
+
+
+def _query_regions(db: Session):
     results = (
         db.query(Property.region, func.count(Property.id).label("property_count"))
         .filter(Property.review_status == PropertyReviewStatus.APPROVED, Property.region.isnot(None))
@@ -32,6 +39,11 @@ def search_by_region(db: Session = Depends(get_db)):
 
 @router.get("/floor-plans", response_model=List[FloorPlanStats])
 def search_by_floor_plan(db: Session = Depends(get_db)):
+    cache_key = CacheKey.stats("floor_plans")
+    return cache_manager.get_or_set(cache_key, lambda: _query_floor_plans(db), ttl=settings.CACHE_LONG_TTL)
+
+
+def _query_floor_plans(db: Session):
     results = (
         db.query(Property.floor_plan, func.count(Property.id).label("property_count"))
         .filter(Property.review_status == PropertyReviewStatus.APPROVED, Property.floor_plan.isnot(None))
@@ -44,6 +56,11 @@ def search_by_floor_plan(db: Session = Depends(get_db)):
 
 @router.get("/dashboard")
 def admin_dashboard(db: Session = Depends(get_db), current_user=Depends(get_current_active_admin)):
+    cache_key = CacheKey.dashboard_stats()
+    return cache_manager.get_or_set(cache_key, lambda: _query_admin_dashboard(db), ttl=settings.CACHE_SHORT_TTL)
+
+
+def _query_admin_dashboard(db: Session):
     total_users = db.query(func.count(User.id)).scalar()
     total_properties = db.query(func.count(Property.id)).scalar()
     approved_properties = db.query(func.count(Property.id)).filter(Property.review_status == PropertyReviewStatus.APPROVED).scalar()
@@ -153,7 +170,11 @@ def get_property_status(db: Session = Depends(get_db), current_user=Depends(get_
 @router.get("/landlord-dashboard")
 def landlord_dashboard(db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
     """房东专属统计面板"""
-    landlord_id = current_user.id
+    cache_key = CacheKey.stats(f"landlord_dashboard:{current_user.id}")
+    return cache_manager.get_or_set(cache_key, lambda: _query_landlord_dashboard(db, current_user.id), ttl=settings.CACHE_SHORT_TTL)
+
+
+def _query_landlord_dashboard(db: Session, landlord_id: int):
 
     total_properties = db.query(func.count(Property.id)).filter(Property.owner_id == landlord_id).scalar()
     published_properties = db.query(func.count(Property.id)).filter(

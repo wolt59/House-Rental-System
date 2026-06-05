@@ -10,6 +10,7 @@ class MessageBase(BaseModel):
     to_user_id: int
     property_id: Optional[int] = None
     content: str
+    link: Optional[str] = None
 
     @field_validator("content")
     @classmethod

@@ -17,3 +17,5 @@ ALTER TABLE messages
 
 ALTER TABLE messages
     ADD INDEX idx_to_from_read (to_user_id, from_user_id, is_read);
+
+ALTER TABLE messages ADD COLUMN link VARCHAR(500) NULL;

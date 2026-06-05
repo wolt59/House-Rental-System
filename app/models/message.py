@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -14,6 +14,7 @@ class Message(Base):
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
     message_type = Column(String(30), default="text", index=True)
     content = Column(String(5000), nullable=False)
+    link = Column(String(500), nullable=True)
     is_read = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

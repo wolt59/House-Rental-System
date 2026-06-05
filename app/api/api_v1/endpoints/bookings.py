@@ -58,14 +58,17 @@ def create_booking(booking_in: BookingCreate, background_tasks: BackgroundTasks,
     landlord = db.query(User).filter(User.id == property_obj.owner_id).first()
     if landlord:
         content = f"租客「{current_user.full_name or current_user.username}」预约了您的房源「{property_obj.title}」看房，预约时间：{booking_in.appointment_time.strftime('%Y-%m-%d %H:%M')}。"
+        link = f"/landlord/bookings"
         notification = MessageModel(
             from_user_id=current_user.id,
             to_user_id=landlord.id,
             property_id=booking.property_id,
             content=content,
             message_type="notification",
+            link=link,
         )
         db.add(notification)
+        db.commit()
 
         unread_before = crud_message.get_unread_count(db, user_id=landlord.id)
 
@@ -78,6 +81,7 @@ def create_booking(booking_in: BookingCreate, background_tasks: BackgroundTasks,
                     "content": content,
                     "message_type": "notification",
                     "property_id": booking.property_id,
+                    "link": link,
                     "is_read": False,
                 },
                 "unread_count": unread_before + 1,
@@ -162,17 +166,52 @@ def update_booking(booking_id: int, booking_in: BookingUpdate, request: Request,
 
 
 @router.post("/{booking_id}/approve", response_model=BookingSchema)
-def approve_booking(booking_id: int, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+def approve_booking(booking_id: int, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     _authorize_booking(booking, current_user)
-    
+
     if booking.status != BookingStatus.PENDING:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending bookings can be approved")
-    
+
     updated = crud_booking.approve_booking(db, booking)
-    
+
+    tenant = db.query(User).filter(User.id == booking.tenant_id).first()
+    if tenant:
+        content = f"房东「{current_user.full_name or current_user.username}」已同意您对房源「{booking.property.title}」的看房预约。"
+        link = f"/tenant/bookings"
+        notification = MessageModel(
+            from_user_id=current_user.id,
+            to_user_id=tenant.id,
+            property_id=booking.property_id,
+            content=content,
+            message_type="notification",
+            link=link,
+        )
+        db.add(notification)
+        db.commit()
+
+        unread_before = crud_message.get_unread_count(db, user_id=tenant.id)
+
+        async def notify_tenant():
+            payload = {
+                "type": "new_message",
+                "message": {
+                    "from_user_id": current_user.id,
+                    "to_user_id": tenant.id,
+                    "content": content,
+                    "message_type": "notification",
+                    "property_id": booking.property_id,
+                    "link": link,
+                    "is_read": False,
+                },
+                "unread_count": unread_before + 1,
+            }
+            await ws_manager.send_personal(payload, tenant.id)
+
+        background_tasks.add_task(notify_tenant)
+
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
@@ -187,20 +226,55 @@ def approve_booking(booking_id: int, request: Request, db: Session = Depends(get
 
 
 @router.post("/{booking_id}/reject", response_model=BookingSchema)
-def reject_booking(booking_id: int, reason: str, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+def reject_booking(booking_id: int, reason: str, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     _authorize_booking(booking, current_user)
-    
+
     if booking.status != BookingStatus.PENDING:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending bookings can be rejected")
-    
+
     if not reason or len(reason.strip()) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reject reason is required")
-    
+
     updated = crud_booking.reject_booking(db, booking, reason)
-    
+
+    tenant = db.query(User).filter(User.id == booking.tenant_id).first()
+    if tenant:
+        content = f"房东「{current_user.full_name or current_user.username}」拒绝了您对房源「{booking.property.title}」的看房预约。原因：{reason}"
+        link = f"/tenant/bookings"
+        notification = MessageModel(
+            from_user_id=current_user.id,
+            to_user_id=tenant.id,
+            property_id=booking.property_id,
+            content=content,
+            message_type="notification",
+            link=link,
+        )
+        db.add(notification)
+        db.commit()
+
+        unread_before = crud_message.get_unread_count(db, user_id=tenant.id)
+
+        async def notify_tenant():
+            payload = {
+                "type": "new_message",
+                "message": {
+                    "from_user_id": current_user.id,
+                    "to_user_id": tenant.id,
+                    "content": content,
+                    "message_type": "notification",
+                    "property_id": booking.property_id,
+                    "link": link,
+                    "is_read": False,
+                },
+                "unread_count": unread_before + 1,
+            }
+            await ws_manager.send_personal(payload, tenant.id)
+
+        background_tasks.add_task(notify_tenant)
+
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
@@ -215,17 +289,52 @@ def reject_booking(booking_id: int, reason: str, request: Request, db: Session =
 
 
 @router.post("/{booking_id}/reschedule", response_model=BookingSchema)
-def reschedule_booking(booking_id: int, reschedule: BookingReschedule, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
+def reschedule_booking(booking_id: int, reschedule: BookingReschedule, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_landlord)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     _authorize_booking(booking, current_user)
-    
+
     if booking.status not in [BookingStatus.PENDING, BookingStatus.APPROVED]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot reschedule this booking")
-    
+
     updated = crud_booking.propose_reschedule(db, booking, reschedule.appointment_time, reschedule.message)
-    
+
+    tenant = db.query(User).filter(User.id == booking.tenant_id).first()
+    if tenant:
+        content = f"房东「{current_user.full_name or current_user.username}」提议改期看房「{booking.property.title}」，新时间：{reschedule.appointment_time.strftime('%Y-%m-%d %H:%M')}。留言：{reschedule.message or '无'}"
+        link = f"/tenant/bookings"
+        notification = MessageModel(
+            from_user_id=current_user.id,
+            to_user_id=tenant.id,
+            property_id=booking.property_id,
+            content=content,
+            message_type="notification",
+            link=link,
+        )
+        db.add(notification)
+        db.commit()
+
+        unread_before = crud_message.get_unread_count(db, user_id=tenant.id)
+
+        async def notify_tenant():
+            payload = {
+                "type": "new_message",
+                "message": {
+                    "from_user_id": current_user.id,
+                    "to_user_id": tenant.id,
+                    "content": content,
+                    "message_type": "notification",
+                    "property_id": booking.property_id,
+                    "link": link,
+                    "is_read": False,
+                },
+                "unread_count": unread_before + 1,
+            }
+            await ws_manager.send_personal(payload, tenant.id)
+
+        background_tasks.add_task(notify_tenant)
+
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
