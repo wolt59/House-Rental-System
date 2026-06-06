@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_current_active_admin, get_current_active_landlord, get_db
-from app.crud import crud_audit, crud_contract, crud_payment
+from app.crud import crud_audit, crud_contract, crud_message, crud_payment
 from app.models.contract import Contract
 from app.models.property import Property
 from app.models.message import Message

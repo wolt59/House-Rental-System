@@ -77,18 +77,17 @@ def list_properties(
         keyword=keyword, role=user_role,
     )
 
+    def fetch_and_serialize():
+        properties = crud_property.get_properties(
+            db, skip=skip, limit=limit, region=region, floor_plan=floor_plan,
+            review_status=filter_review_status, status=filter_status, keyword=keyword,
+        )
+        # 将 ORM 模型转为 Pydantic dict，确保关系数据（如 images）可序列化
+        return [Property.model_validate(p).model_dump(mode='json') for p in properties]
+
     return cache_manager.get_or_set(
         cache_key,
-        lambda: crud_property.get_properties(
-            db,
-            skip=skip,
-            limit=limit,
-            region=region,
-            floor_plan=floor_plan,
-            review_status=filter_review_status,
-            status=filter_status,
-            keyword=keyword,
-        ),
+        fetch_and_serialize,
         ttl=settings.CACHE_SHORT_TTL,
     )
 
@@ -152,25 +151,6 @@ def create_property(property_in: PropertyCreate, request: Request, db: Session =
 
 @router.get("/{property_id}", response_model=Property)
 def read_property(property_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user_optional)):
-    cache_key = CacheKey.property(property_id)
-
-    # 尝试从缓存获取
-    cached = cache_manager.get(cache_key)
-    if cached is not None:
-        db_property = crud_property.get_property(db, property_id=property_id)
-        if not db_property:
-            cache_manager.delete(cache_key)
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
-        if (
-            db_property.review_status != PropertyReviewStatus.APPROVED
-            and (not current_user or db_property.owner_id != current_user.id)
-            and (not current_user or current_user.role != "admin")
-        ):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
-        # 增量浏览量（不阻断请求）
-        _increment_view(db, db_property)
-        return cached
-
     db_property = crud_property.get_property(db, property_id=property_id)
     if not db_property:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
@@ -183,10 +163,6 @@ def read_property(property_id: int, db: Session = Depends(get_db), current_user=
 
     # 增量浏览量
     _increment_view(db, db_property)
-
-    # 缓存房源数据（仅对已审核通过的公开房源缓存）
-    if db_property.review_status == PropertyReviewStatus.APPROVED:
-        cache_manager.set(cache_key, db_property, ttl=settings.CACHE_DEFAULT_TTL)
 
     return db_property
 

@@ -48,7 +48,7 @@ class PropertyBase(BaseModel):
     
     # 3. 租赁价格与押金类
     rent: float  # 每月租金
-    deposit: float  # 押金金额
+    deposit: Optional[float] = None  # 押金金额
     payment_method: Optional[str] = None  # 付款方式
     
     # 4. 租期与入住规则类
