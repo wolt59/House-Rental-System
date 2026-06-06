@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_current_active_admin, get_db
+from app.cache import cache_manager, CacheKey, invalidate_news_cache
+from app.core.config import settings
 from app.crud import crud_audit, crud_news
 from app.schemas.news import News as NewsSchema, NewsCreate, NewsUpdate, NewsReview
 
@@ -48,6 +50,8 @@ def create_news(news_in: NewsCreate, request: Request, db: Session = Depends(get
         detail=f"News created: {news.title} (status={news.status})",
         ip_address=ip_address,
     )
+    if news.status == "published":
+        invalidate_news_cache()
     return _news_to_schema(news)
 
 
@@ -61,7 +65,16 @@ def list_news(
 ):
     """公开列表：只展示已发布(published)的新闻"""
     filter_status = status or "published"
-    items, total = crud_news.get_news_list(db, status=filter_status, category=category, skip=skip, limit=limit)
+    cache_key = CacheKey.news_list(status=filter_status, category=category, skip=skip, limit=limit)
+    return cache_manager.get_or_set(
+        cache_key,
+        lambda: _fetch_news_list(db, filter_status, category, skip, limit),
+        ttl=settings.CACHE_SHORT_TTL,
+    )
+
+
+def _fetch_news_list(db: Session, status: str, category: Optional[str], skip: int, limit: int) -> dict:
+    items, total = crud_news.get_news_list(db, status=status, category=category, skip=skip, limit=limit)
     return {
         "items": [_news_to_schema(n) for n in items],
         "total": total,
@@ -102,11 +115,23 @@ def list_all_news_admin(
 
 @router.get("/{news_id}", response_model=NewsSchema)
 def read_news(news_id: int, db: Session = Depends(get_db)):
+    cache_key = CacheKey.news(news_id)
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        # 浏览量增量（不阻断请求，也不影响缓存命中）
+        news = crud_news.get_news(db, news_id)
+        if news:
+            crud_news.increment_view_count(db, news)
+        return cached
+
     news = crud_news.get_news(db, news_id)
     if not news:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="News not found")
     crud_news.increment_view_count(db, news)
-    return _news_to_schema(news)
+    result = _news_to_schema(news)
+    if news.status == "published":
+        cache_manager.set(cache_key, result, ttl=settings.CACHE_DEFAULT_TTL)
+    return result
 
 
 @router.put("/{news_id}", response_model=NewsSchema)
@@ -133,6 +158,7 @@ def update_news(news_id: int, news_in: NewsUpdate, request: Request, db: Session
         detail=f"News updated: {updated.title} (status={updated.status})",
         ip_address=ip_address,
     )
+    invalidate_news_cache(news_id)
     return _news_to_schema(updated)
 
 
@@ -167,6 +193,7 @@ def review_news(news_id: int, review_in: NewsReview, request: Request, db: Sessi
         detail=f"News {review_in.action}d: {updated.title}" + (f" - {review_in.message}" if review_in.message else ""),
         ip_address=ip_address,
     )
+    invalidate_news_cache(news_id)
     return _news_to_schema(updated)
 
 
@@ -188,4 +215,5 @@ def delete_news(news_id: int, request: Request, db: Session = Depends(get_db), c
         detail=f"News deleted: {news.title}",
         ip_address=ip_address,
     )
+    invalidate_news_cache(news_id)
     return None

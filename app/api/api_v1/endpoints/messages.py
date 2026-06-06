@@ -48,6 +48,7 @@ def send_message(
                 "content": message.content,
                 "message_type": message.message_type,
                 "property_id": message.property_id,
+                "link": message.link,
                 "is_read": message.is_read,
                 "created_at": message.created_at.isoformat() if message.created_at else None,
             },

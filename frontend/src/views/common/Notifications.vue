@@ -3,10 +3,28 @@
     <div class="notif-header">
       <h2>通知中心</h2>
     </div>
+    <div class="notif-toolbar">
+      <el-input
+        v-model="searchKeyword"
+        placeholder="搜索通知内容..."
+        :prefix-icon="Search"
+        clearable
+        class="search-input"
+        @input="handleSearch"
+      />
+      <el-select v-model="filterType" placeholder="通知类型" clearable class="filter-select" @change="handleFilterChange">
+        <el-option label="全部" value="" />
+        <el-option label="未读" value="unread" />
+        <el-option label="已读" value="read" />
+      </el-select>
+      <el-button v-if="hasUnread" type="primary" text @click="markAllRead">
+        全部已读
+      </el-button>
+    </div>
     <div class="notif-body" v-loading="loading">
-      <div class="notification-list" v-if="notifications.length > 0">
+      <div class="notification-list" v-if="filteredNotifications.length > 0">
         <div
-          v-for="msg in notifications"
+          v-for="msg in filteredNotifications"
           :key="msg.id"
           :class="['notification-item', { unread: !msg.is_read }]"
           @click="markAsRead(msg)"
@@ -18,10 +36,21 @@
             <div class="notif-text">{{ msg.content }}</div>
             <div class="notif-time">{{ formatTime(msg.created_at) }}</div>
           </div>
-          <el-tag v-if="!msg.is_read" size="small" type="danger">未读</el-tag>
+          <el-tag v-if="!msg.is_read" size="small" type="danger" class="notif-tag">未读</el-tag>
+          <div class="notif-actions" @click.stop>
+            <el-button
+              v-if="msg.link"
+              type="primary"
+              size="small"
+              text
+              @click="handleAction(msg)"
+            >
+              去处理
+            </el-button>
+          </div>
         </div>
       </div>
-      <el-empty v-if="!loading && notifications.length === 0" description="暂无通知" />
+      <el-empty v-if="!loading && filteredNotifications.length === 0" description="暂无通知" />
       <div class="pagination-wrap" v-if="total > pageSize">
         <el-pagination
           background
@@ -37,9 +66,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Bell } from '@element-plus/icons-vue'
+import { Bell, Search } from '@element-plus/icons-vue'
 import { useUserStore } from '../../store/user'
 import {
   getReceivedMessages,
@@ -47,6 +77,7 @@ import {
   createWebSocket,
 } from '../../api/message'
 
+const router = useRouter()
 const userStore = useUserStore()
 
 const notifications = ref([])
@@ -54,9 +85,30 @@ const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = 10
 const total = ref(0)
+const searchKeyword = ref('')
+const filterType = ref('')
 
 let ws = null
 let wsReconnectTimer = null
+
+const hasUnread = computed(() => notifications.value.some(n => !n.is_read))
+
+const filteredNotifications = computed(() => {
+  let result = notifications.value
+
+  if (filterType.value === 'unread') {
+    result = result.filter(n => !n.is_read)
+  } else if (filterType.value === 'read') {
+    result = result.filter(n => n.is_read)
+  }
+
+  if (searchKeyword.value.trim()) {
+    const kw = searchKeyword.value.trim().toLowerCase()
+    result = result.filter(n => n.content && n.content.toLowerCase().includes(kw))
+  }
+
+  return result
+})
 
 function formatTime(d) {
   if (!d) return ''
@@ -107,6 +159,30 @@ async function markAsRead(msg) {
   } catch (e) {
     console.error('markMessageRead failed:', e)
   }
+}
+
+async function markAllRead() {
+  const unreadList = notifications.value.filter(n => !n.is_read)
+  for (const msg of unreadList) {
+    await markAsRead(msg)
+  }
+  ElMessage.success('已全部标记为已读')
+}
+
+function handleAction(msg) {
+  if (!msg.link) return
+  if (!msg.is_read) {
+    markMessageRead(msg.id).then(() => {
+      msg.is_read = true
+    }).catch(() => {})
+  }
+  router.push(msg.link)
+}
+
+function handleSearch() {
+}
+
+function handleFilterChange() {
 }
 
 function connectWebSocket() {
@@ -178,6 +254,21 @@ onBeforeUnmount(() => {
   color: #303133;
 }
 
+.notif-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+}
+
+.search-input {
+  width: 280px;
+}
+
+.filter-select {
+  width: 120px;
+}
+
 .notif-body {
   flex: 1;
   margin: 0 24px 24px;
@@ -196,16 +287,22 @@ onBeforeUnmount(() => {
 
 .notification-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   padding: 14px 20px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
   transition: background 0.15s;
+  position: relative;
 }
 
 .notification-item:hover {
   background: #f5f7fa;
+}
+
+.notification-item:hover .notif-actions {
+  opacity: 1;
+  visibility: visible;
 }
 
 .notification-item.unread {
@@ -233,6 +330,17 @@ onBeforeUnmount(() => {
 .notif-time {
   font-size: 12px;
   color: #909399;
+}
+
+.notif-tag {
+  flex-shrink: 0;
+}
+
+.notif-actions {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  flex-shrink: 0;
 }
 
 .pagination-wrap {

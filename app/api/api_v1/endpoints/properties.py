@@ -11,6 +11,8 @@ from app.api.deps import (
     get_current_user_optional,
     get_db,
 )
+from app.cache import cache_manager, CacheKey, invalidate_property_cache
+from app.core.config import settings
 from app.crud import crud_audit, crud_property, crud_message
 from app.models.message import Message as MessageModel
 from app.models.property import Property as PropertyModel
@@ -66,16 +68,28 @@ def list_properties(
             filter_status = status
         else:
             filter_status = PropertyStatus.PUBLISHED  # 默认只显示已发布
-    
-    return crud_property.get_properties(
-        db,
-        skip=skip,
-        limit=limit,
-        region=region,
-        floor_plan=floor_plan,
-        review_status=filter_review_status,
-        status=filter_status,
-        keyword=keyword,
+
+    # 构建缓存键
+    user_role = current_user.role if current_user else "anonymous"
+    cache_key = CacheKey.property_list(
+        skip=skip, limit=limit, region=region, floor_plan=floor_plan,
+        status=filter_status, review_status=filter_review_status,
+        keyword=keyword, role=user_role,
+    )
+
+    return cache_manager.get_or_set(
+        cache_key,
+        lambda: crud_property.get_properties(
+            db,
+            skip=skip,
+            limit=limit,
+            region=region,
+            floor_plan=floor_plan,
+            review_status=filter_review_status,
+            status=filter_status,
+            keyword=keyword,
+        ),
+        ttl=settings.CACHE_SHORT_TTL,
     )
 
 
@@ -132,11 +146,31 @@ def create_property(property_in: PropertyCreate, request: Request, db: Session =
         detail=f"Property created as draft",
         ip_address=ip_address,
     )
+    invalidate_property_cache()
     return property_obj
 
 
 @router.get("/{property_id}", response_model=Property)
 def read_property(property_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user_optional)):
+    cache_key = CacheKey.property(property_id)
+
+    # 尝试从缓存获取
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        db_property = crud_property.get_property(db, property_id=property_id)
+        if not db_property:
+            cache_manager.delete(cache_key)
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+        if (
+            db_property.review_status != PropertyReviewStatus.APPROVED
+            and (not current_user or db_property.owner_id != current_user.id)
+            and (not current_user or current_user.role != "admin")
+        ):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+        # 增量浏览量（不阻断请求）
+        _increment_view(db, db_property)
+        return cached
+
     db_property = crud_property.get_property(db, property_id=property_id)
     if not db_property:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
@@ -146,18 +180,25 @@ def read_property(property_id: int, db: Session = Depends(get_db), current_user=
         and (not current_user or current_user.role != "admin")
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
-    
-    # 增加浏览量
+
+    # 增量浏览量
+    _increment_view(db, db_property)
+
+    # 缓存房源数据（仅对已审核通过的公开房源缓存）
+    if db_property.review_status == PropertyReviewStatus.APPROVED:
+        cache_manager.set(cache_key, db_property, ttl=settings.CACHE_DEFAULT_TTL)
+
+    return db_property
+
+
+def _increment_view(db: Session, db_property):
+    """增加房源浏览量，失败不阻断请求"""
     try:
         db_property.view_count = (db_property.view_count or 0) + 1
         db.commit()
         db.refresh(db_property)
     except Exception:
         db.rollback()
-        # 如果增加浏览量失败，不阻断用户查看房源
-        pass
-    
-    return db_property
 
 
 @router.put("/{property_id}", response_model=Property)
@@ -298,6 +339,7 @@ def update_property(
 
             background_tasks.add_task(notify_admins)
 
+    invalidate_property_cache(property_id)
     return updated
 
 
@@ -396,6 +438,7 @@ def review_property(
 
     background_tasks.add_task(notify_owner)
 
+    invalidate_property_cache(property_id)
     return updated
 
 
@@ -431,6 +474,7 @@ def change_property_status(
         detail=f"Property status changed to {status_in.status}",
         ip_address=ip_address,
     )
+    invalidate_property_cache(property_id)
     return db_property
 
 
@@ -452,6 +496,7 @@ def delete_property(property_id: int, request: Request, db: Session = Depends(ge
         detail="Property deleted",
         ip_address=ip_address,
     )
+    invalidate_property_cache(property_id)
     return removed
 
 
@@ -513,6 +558,7 @@ def submit_for_review(property_id: int, background_tasks: BackgroundTasks, reque
 
         background_tasks.add_task(notify_admins)
 
+    invalidate_property_cache(property_id)
     return updated
 
 
@@ -574,6 +620,7 @@ def withdraw_review(property_id: int, background_tasks: BackgroundTasks, request
 
         background_tasks.add_task(notify_admins)
 
+    invalidate_property_cache(property_id)
     return updated
 
 
@@ -652,6 +699,7 @@ def unpublish_property(
 
         background_tasks.add_task(notify_owner)
 
+    invalidate_property_cache(property_id)
     return updated
 
 
@@ -686,4 +734,5 @@ def republish_property(
         detail="Property republished",
         ip_address=ip_address,
     )
+    invalidate_property_cache(property_id)
     return updated

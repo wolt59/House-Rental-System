@@ -26,7 +26,7 @@ class PropertyBase(BaseModel):
     # 第一类：必填信息（业务核心数据）
     # 1. 位置地址类
     title: constr(min_length=3, max_length=200)
-    city: str  # 所属城市
+    city: Optional[str] = None  # 所属城市
     region: str  # 行政区/区县
     address: constr(min_length=3, max_length=300)  # 详细门牌号
     community_name: Optional[str] = None  # 小区名称
@@ -49,7 +49,7 @@ class PropertyBase(BaseModel):
     # 3. 租赁价格与押金类
     rent: float  # 每月租金
     deposit: float  # 押金金额
-    payment_method: str  # 付款方式
+    payment_method: Optional[str] = None  # 付款方式
     
     # 4. 租期与入住规则类
     min_lease_term: Optional[int] = None  # 最短租期（月）

@@ -48,6 +48,7 @@ def create_message(db: Session, from_user_id: int, message_in: MessageCreate) ->
         property_id=message_in.property_id,
         message_type=message_in.message_type or "text",
         content=message_in.content,
+        link=message_in.link,
     )
     db.add(message)
     db.commit()
