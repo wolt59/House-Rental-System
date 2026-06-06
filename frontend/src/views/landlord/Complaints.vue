@@ -108,9 +108,9 @@ async function loadData() {
   loading.value = true
   try {
     const res = await getComplaints({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
-    list.value = Array.isArray(res) ? res : []
+    list.value = res.items || []
     await resolveItems(list.value, ['tenant_id', 'property_id'])
-    total.value = Array.isArray(res) ? res.length : 0
+    total.value = res.total || 0
   } catch (e) {
     ElMessage.error('加载失败')
   } finally {

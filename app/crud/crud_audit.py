@@ -62,3 +62,37 @@ def get_audit_logs(
     if created_to is not None:
         query = query.filter(AuditLog.created_at <= created_to)
     return query.order_by(AuditLog.created_at.desc()).offset(skip).limit(limit).all()
+
+
+def count_audit_logs(
+    db: Session,
+    user_id: Optional[int] = None,
+    action: Optional[str] = None,
+    action_contains: Optional[str] = None,
+    target_type: Optional[str] = None,
+    target_id: Optional[int] = None,
+    detail_contains: Optional[str] = None,
+    ip_address: Optional[str] = None,
+    created_from: Optional[datetime] = None,
+    created_to: Optional[datetime] = None,
+) -> int:
+    query = db.query(AuditLog)
+    if user_id is not None:
+        query = query.filter(AuditLog.user_id == user_id)
+    if action is not None:
+        query = query.filter(AuditLog.action == action)
+    if action_contains is not None:
+        query = query.filter(AuditLog.action.contains(action_contains))
+    if target_type is not None:
+        query = query.filter(AuditLog.target_type == target_type)
+    if target_id is not None:
+        query = query.filter(AuditLog.target_id == target_id)
+    if detail_contains is not None:
+        query = query.filter(AuditLog.detail.contains(detail_contains))
+    if ip_address is not None:
+        query = query.filter(AuditLog.ip_address.contains(ip_address))
+    if created_from is not None:
+        query = query.filter(AuditLog.created_at >= created_from)
+    if created_to is not None:
+        query = query.filter(AuditLog.created_at <= created_to)
+    return query.count()

@@ -312,8 +312,8 @@ async function loadData() {
       getPayments(params),
       getPaymentStats().catch(() => null),
     ])
-    payments.value = Array.isArray(res) ? res : []
-    total.value = Array.isArray(res) ? res.length : 0
+    payments.value = (res && res.items) || []
+    total.value = (res && res.total) || 0
     if (statsRes) {
       stats.total_pending = statsRes.total_pending || 0
       stats.total_overdue = statsRes.total_overdue || 0

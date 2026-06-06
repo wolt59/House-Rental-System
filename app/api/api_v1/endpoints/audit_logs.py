@@ -7,11 +7,12 @@ from app.api.deps import get_current_active_admin, get_db
 from app.crud import crud_audit
 from app.models.audit_log import AuditLog as AuditLogModel
 from app.schemas.audit_log import AuditLog
+from app.schemas.common import PaginatedResponse
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[AuditLog])
+@router.get("/")
 def list_audit_logs(
     skip: int = 0,
     limit: int = 20,
@@ -27,7 +28,7 @@ def list_audit_logs(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_admin),
 ):
-    return crud_audit.get_audit_logs(
+    items = crud_audit.get_audit_logs(
         db,
         skip=skip,
         limit=limit,
@@ -41,6 +42,19 @@ def list_audit_logs(
         created_from=created_from,
         created_to=created_to,
     )
+    total = crud_audit.count_audit_logs(
+        db,
+        user_id=user_id,
+        action=action,
+        action_contains=action_contains,
+        target_type=target_type,
+        target_id=target_id,
+        detail_contains=detail_contains,
+        ip_address=ip_address,
+        created_from=created_from,
+        created_to=created_to,
+    )
+    return {"items": items, "total": total}
 
 
 @router.get("/{audit_id}", response_model=AuditLog)

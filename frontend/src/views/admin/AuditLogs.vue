@@ -71,9 +71,9 @@ async function loadData() {
     if (filters.target_type) params.target_type = filters.target_type
     if (filters.ip_address) params.ip_address = filters.ip_address
     const res = await getAuditLogs(params)
-    logs.value = Array.isArray(res) ? res : []
+    logs.value = res.items || []
     if (logs.value.length) await resolveItems(logs.value, ['user_id'])
-    total.value = Array.isArray(res) ? res.length : 0
+    total.value = res.total || 0
   } catch (e) { ElMessage.error('加载审计日志失败') } finally {
     loading.value = false
   }

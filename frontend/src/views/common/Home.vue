@@ -88,8 +88,8 @@ onMounted(async () => {
       getProperties({ skip: 0, limit: 6 }),
       getNewsList({ skip: 0, limit: 3 }),
     ])
-    properties.value = Array.isArray(pRes) ? pRes : []
-    newsList.value = Array.isArray(nRes) ? nRes : []
+    properties.value = (pRes && pRes.items) || []
+    newsList.value = (nRes && nRes.items) || []
   } catch (e) {
     ElMessage.error('加载首页数据失败')
   } finally {

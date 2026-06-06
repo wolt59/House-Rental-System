@@ -100,8 +100,8 @@ async function loadData() {
     if (filters.region) params.region = filters.region
     if (filters.floor_plan) params.floor_plan = filters.floor_plan
     const res = await getProperties(params)
-    properties.value = Array.isArray(res) ? res : []
-    total.value = properties.value.length
+    properties.value = (res && res.items) || []
+    total.value = res.total || 0
   } catch (e) {
     ElMessage.error('加载房源列表失败')
   } finally {

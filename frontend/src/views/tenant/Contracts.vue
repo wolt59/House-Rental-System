@@ -316,7 +316,7 @@ async function loadData() {
   loading.value = true
   try {
     const res = await getContracts({ skip: 0, limit: 100 })
-    contracts.value = Array.isArray(res) ? res : []
+    contracts.value = (res && res.items) || []
     await resolveItems(contracts.value, ['landlord_id', 'property_id'])
   } catch {
     ElMessage.error('加载合同列表失败')

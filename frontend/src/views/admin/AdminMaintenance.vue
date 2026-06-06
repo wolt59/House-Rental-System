@@ -2,16 +2,16 @@
   <div class="page-container">
     <div class="page-header">
       <h2>维修管理</h2>
-      <div class="header-actions">
-        <el-select v-model="statusFilter" placeholder="按状态筛选" clearable style="width: 140px" @change="loadData">
-          <el-option label="新建" value="new" />
-          <el-option label="处理中" value="in_progress" />
-          <el-option label="已解决" value="resolved" />
-          <el-option label="已关闭" value="closed" />
-        </el-select>
-        <el-button type="primary" @click="loadData">刷新</el-button>
-      </div>
+      <el-button type="primary" @click="loadData">刷新</el-button>
     </div>
+
+    <el-tabs v-model="statusFilter" @tab-change="loadData" style="margin-bottom: 8px">
+      <el-tab-pane label="全部" name="" />
+      <el-tab-pane label="新建" name="new" />
+      <el-tab-pane label="处理中" name="in_progress" />
+      <el-tab-pane label="已解决" name="resolved" />
+      <el-tab-pane label="已关闭" name="closed" />
+    </el-tabs>
 
     <el-table :data="list" stripe v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="60" />
@@ -139,9 +139,9 @@ async function loadData() {
     if (statusFilter.value) params.status = statusFilter.value
 
     const res = await getMaintenances(params)
-    list.value = Array.isArray(res) ? res : []
+    list.value = res.items || []
     await resolveItems(list.value, ['tenant_id', 'property_id'])
-    total.value = Array.isArray(res) ? res.length : 0
+    total.value = res.total || 0
   } catch (e) {
     ElMessage.error('加载维修列表失败')
   } finally {
@@ -216,11 +216,6 @@ onMounted(loadData)
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
 }
 
 .pagination-wrap {

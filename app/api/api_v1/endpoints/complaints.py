@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_landlord, get_current_active_user, get_current_active_admin, get_db
+from app.schemas.common import PaginatedResponse
 from app.crud import crud_audit, crud_complaint
 from app.models.complaint import Complaint
 from app.models.property import Property
@@ -43,7 +44,7 @@ def create_complaint(complaint_in: ComplaintCreate, request: Request, db: Sessio
     return complaint
 
 
-@router.get("/", response_model=List[ComplaintSchema])
+@router.get("/")
 def list_complaints(
     skip: int = 0,
     limit: int = 20,
@@ -58,7 +59,9 @@ def list_complaints(
         query = query.join(Property).filter(Property.owner_id == current_user.id)
     if status is not None:
         query = query.filter(Complaint.status == status)
-    return query.offset(skip).limit(limit).all()
+    total = query.count()
+    items = query.offset(skip).limit(limit).all()
+    return {"items": items, "total": total}
 
 
 @router.get("/{complaint_id}", response_model=ComplaintSchema)

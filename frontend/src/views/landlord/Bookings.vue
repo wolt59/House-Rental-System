@@ -180,7 +180,7 @@ async function loadData() {
     } else if (activeTab.value === 'upcoming') {
       // 未来日程：后端筛选已同意状态，前端再按时间过滤
       const res = await getBookings({ status: 'approved', skip: 0, limit: 100, sort_by: sortBy.value, sort_order: sortOrder.value })
-      const allBookings = Array.isArray(res) ? res : []
+      const allBookings = (res && res.items) || []
       const now = new Date()
       bookings.value = allBookings.filter(b => new Date(b.appointment_time) > now)
       await resolveItems(bookings.value, ['tenant_id', 'property_id'])
@@ -188,9 +188,9 @@ async function loadData() {
       return
     }
     const res = await getBookings(params)
-    bookings.value = Array.isArray(res) ? res : []
+    bookings.value = res.items || []
     await resolveItems(bookings.value, ['tenant_id', 'property_id'])
-    total.value = Array.isArray(res) ? res.length : 0
+    total.value = res.total || 0
   } catch (e) { 
     ElMessage.error('加载预约列表失败') 
   } finally {

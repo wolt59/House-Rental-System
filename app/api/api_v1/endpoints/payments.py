@@ -108,7 +108,7 @@ def create_payment(
     return payment
 
 
-@router.get("/", response_model=List[dict])
+@router.get("/")
 def list_payments(
     contract_id: Optional[int] = Query(None),
     property_id: Optional[int] = Query(None),
@@ -130,14 +130,22 @@ def list_payments(
         due_date_from=due_date_from, due_date_to=due_date_to,
         skip=skip, limit=limit,
     )
+    count_kwargs = dict(
+        contract_id=contract_id, property_id=property_id,
+        status=status, bill_type=bill_type,
+        due_date_from=due_date_from, due_date_to=due_date_to,
+    )
     if current_user.role == "admin":
         payments = crud_payment.get_payments(db, **base_kwargs)
+        total = crud_payment.get_payments_count(db, **count_kwargs)
     elif current_user.role == "landlord":
         payments = crud_payment.get_payments(db, landlord_id=current_user.id, **base_kwargs)
+        total = crud_payment.get_payments_count(db, landlord_id=current_user.id, **count_kwargs)
     else:
         payments = crud_payment.get_payments(db, tenant_id=current_user.id, **base_kwargs)
+        total = crud_payment.get_payments_count(db, tenant_id=current_user.id, **count_kwargs)
 
-    return [_enrich_payment(db, p) for p in payments]
+    return {"items": [_enrich_payment(db, p) for p in payments], "total": total}
 
 
 @router.get("/stats")

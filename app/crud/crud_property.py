@@ -45,6 +45,36 @@ def get_properties(
     return query.offset(skip).limit(limit).all()
 
 
+def count_properties(
+    db: Session,
+    region: str | None = None,
+    floor_plan: str | None = None,
+    owner_id: int | None = None,
+    review_status: str | None = None,
+    status: str | None = None,
+    keyword: str | None = None,
+) -> int:
+    query = db.query(Property)
+    if owner_id is not None:
+        query = query.filter(Property.owner_id == owner_id)
+    if region:
+        query = query.filter(Property.region == region)
+    if floor_plan:
+        query = query.filter(Property.floor_plan == floor_plan)
+    if review_status is not None:
+        query = query.filter(Property.review_status == review_status)
+    if status is not None:
+        query = query.filter(Property.status == status)
+    if keyword:
+        query = query.filter(
+            or_(
+                Property.title.contains(keyword),
+                Property.address.contains(keyword),
+            )
+        )
+    return query.count()
+
+
 def create_property(db: Session, owner_id: int, property_in: PropertyCreate) -> Property:
     data = property_in.model_dump()
     data["owner_id"] = owner_id

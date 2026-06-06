@@ -172,9 +172,9 @@ async function loadData() {
     if (statusFilter.value) params.status_filter = statusFilter.value
 
     const res = await getContracts(params)
-    contracts.value = Array.isArray(res) ? res : []
+    contracts.value = res.items || []
     await resolveItems(contracts.value, ['tenant_id', 'landlord_id', 'property_id'])
-    total.value = Array.isArray(res) ? res.length : 0
+    total.value = res.total || 0
   } catch (e) {
     ElMessage.error('加载合同列表失败')
   } finally {

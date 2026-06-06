@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_current_active_admin, get_current_active_landlord, get_db
 from app.crud import crud_audit, crud_contract, crud_message, crud_payment
+from app.schemas.common import PaginatedResponse
 from app.models.contract import Contract
 from app.models.property import Property
 from app.models.message import Message
@@ -193,7 +194,7 @@ def auto_create_contract(
     return contract
 
 
-@router.get("/", response_model=List[ContractSchema])
+@router.get("/")
 def list_contracts(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
@@ -209,13 +210,17 @@ def list_contracts(
             print(f"自动过期了 {expired_count} 个合同")
     except Exception as e:
         print(f"检查过期合同时出错: {e}")
-    
+
     if current_user.role == "admin":
-        return crud_contract.get_contracts(db, status=status_filter, skip=skip, limit=limit)
+        items = crud_contract.get_contracts(db, status=status_filter, skip=skip, limit=limit)
+        total = crud_contract.count_contracts(db, status=status_filter)
     elif current_user.role == "landlord":
-        return crud_contract.get_contracts(db, landlord_id=current_user.id, status=status_filter, skip=skip, limit=limit)
+        items = crud_contract.get_contracts(db, landlord_id=current_user.id, status=status_filter, skip=skip, limit=limit)
+        total = crud_contract.count_contracts(db, landlord_id=current_user.id, status=status_filter)
     else:
-        return crud_contract.get_contracts(db, tenant_id=current_user.id, status=status_filter, skip=skip, limit=limit)
+        items = crud_contract.get_contracts(db, tenant_id=current_user.id, status=status_filter, skip=skip, limit=limit)
+        total = crud_contract.count_contracts(db, tenant_id=current_user.id, status=status_filter)
+    return {"items": items, "total": total}
 
 
 @router.get("/{contract_id}", response_model=ContractSchema)

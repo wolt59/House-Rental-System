@@ -74,7 +74,7 @@ function getCoverImage(p) {
 async function searchByRegion(region) {
   try {
     const res = await getProperties({ region, limit: 20 })
-    searchResults.value = Array.isArray(res) ? res : []
+    searchResults.value = (res && res.items) || []
   } catch (e) {
     ElMessage.error('按地区搜索失败')
   }
@@ -83,7 +83,7 @@ async function searchByRegion(region) {
 async function searchByFloorPlan(floor_plan) {
   try {
     const res = await getProperties({ floor_plan, limit: 20 })
-    searchResults.value = Array.isArray(res) ? res : []
+    searchResults.value = (res && res.items) || []
   } catch (e) {
     ElMessage.error('按户型搜索失败')
   }

@@ -103,8 +103,8 @@ async function loadData() {
   loading.value = true
   try {
     const res = await getMaintenances({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
-    list.value = Array.isArray(res) ? res : []
-    total.value = Array.isArray(res) ? res.length : 0
+    list.value = res.items || []
+    total.value = res.total || 0
   } catch (e) {
     ElMessage.error('加载维修记录失败')
   } finally {
@@ -115,7 +115,7 @@ async function loadData() {
 async function loadMyProperties() {
   try {
     const res = await getProperties({ limit: 100 })
-    myProperties.value = Array.isArray(res) ? res : []
+    myProperties.value = (res && res.items) || []
   } catch (e) {
     ElMessage.error('加载房源列表失败')
   }

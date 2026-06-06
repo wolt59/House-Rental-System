@@ -10,6 +10,7 @@ from app.models.message import Message as MessageModel
 from app.models.property import Property
 from app.models.user import User
 from app.schemas.booking import BookingCreate, Booking as BookingSchema, BookingUpdate, BookingReschedule, BookingRescheduleResponse
+from app.schemas.common import PaginatedResponse
 from app.core.enums import BookingStatus
 from app.api.websocket import ws_manager
 
@@ -97,7 +98,7 @@ def create_booking(booking_in: BookingCreate, background_tasks: BackgroundTasks,
 
 
 
-@router.get("/", response_model=List[BookingSchema])
+@router.get("/")
 def list_bookings(
         db: Session = Depends(get_db),
         current_user=Depends(get_current_active_user),
@@ -131,7 +132,9 @@ def list_bookings(
     else:
         query = query.order_by(sort_column.asc())
 
-    return query.offset(skip).limit(limit).all()
+    total = query.count()
+    items = query.offset(skip).limit(limit).all()
+    return {"items": items, "total": total}
 
 
 @router.get("/{booking_id}", response_model=BookingSchema)

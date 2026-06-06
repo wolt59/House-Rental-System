@@ -42,6 +42,25 @@ def get_contracts(
     return query.order_by(Contract.created_at.desc()).offset(skip).limit(limit).all()
 
 
+def count_contracts(
+    db: Session,
+    landlord_id: Optional[int] = None,
+    tenant_id: Optional[int] = None,
+    property_id: Optional[int] = None,
+    status: Optional[str] = None,
+) -> int:
+    query = db.query(Contract)
+    if landlord_id is not None:
+        query = query.filter(Contract.landlord_id == landlord_id)
+    if tenant_id is not None:
+        query = query.filter(Contract.tenant_id == tenant_id)
+    if property_id is not None:
+        query = query.filter(Contract.property_id == property_id)
+    if status is not None:
+        query = query.filter(Contract.status == status)
+    return query.count()
+
+
 def create_contract(db: Session, landlord_id: int, contract_in: ContractCreate) -> Contract:
     contract = Contract(
         contract_no=_generate_contract_no(),

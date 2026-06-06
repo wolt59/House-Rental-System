@@ -75,6 +75,8 @@ def get_payments_count(
     property_id: Optional[int] = None,
     status: Optional[str] = None,
     bill_type: Optional[str] = None,
+    due_date_from: Optional[datetime] = None,
+    due_date_to: Optional[datetime] = None,
 ) -> int:
     query = db.query(Payment)
     if contract_id is not None:
@@ -89,6 +91,10 @@ def get_payments_count(
         query = query.filter(Payment.status == status)
     if bill_type is not None:
         query = query.filter(Payment.bill_type == bill_type)
+    if due_date_from is not None:
+        query = query.filter(Payment.due_date >= due_date_from)
+    if due_date_to is not None:
+        query = query.filter(Payment.due_date <= due_date_to)
     return query.count()
 
 

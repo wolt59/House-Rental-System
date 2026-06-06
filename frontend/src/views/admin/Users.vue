@@ -1,15 +1,12 @@
 <template>
   <div class="page-container">
     <div class="page-header"><h2>用户管理</h2></div>
-    <el-form :inline="true" :model="filters" style="margin-bottom: 16px">
-      <el-form-item label="角色">
-        <el-select v-model="filters.role" clearable placeholder="全部" @change="loadData">
-          <el-option label="租客" value="tenant" />
-          <el-option label="房东" value="landlord" />
-          <el-option label="管理员" value="admin" />
-        </el-select>
-      </el-form-item>
-    </el-form>
+    <el-tabs v-model="filters.role" @tab-change="loadData" style="margin-bottom: 8px">
+      <el-tab-pane label="全部" name="" />
+      <el-tab-pane label="租客" name="tenant" />
+      <el-tab-pane label="房东" name="landlord" />
+      <el-tab-pane label="管理员" name="admin" />
+    </el-tabs>
     <el-table :data="users" stripe v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="username" label="用户名" min-width="140" show-overflow-tooltip />
@@ -104,8 +101,8 @@ async function loadData() {
     const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
     if (filters.role) params.role = filters.role
     const res = await getUsers(params)
-    users.value = Array.isArray(res) ? res : []
-    total.value = Array.isArray(res) ? res.length : 0
+    users.value = res.items || []
+    total.value = res.total || 0
   } catch (e) { ElMessage.error('加载用户列表失败') } finally {
     loading.value = false
   }
