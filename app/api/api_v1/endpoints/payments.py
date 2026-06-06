@@ -1,10 +1,13 @@
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_current_active_admin, get_db
-from app.crud import crud_audit, crud_payment, crud_contract
+from app.api.websocket import ws_manager
+from app.crud import crud_audit, crud_payment, crud_contract, crud_message
+from app.models.message import Message
+from app.models.property import Property
 from app.schemas.payment import (
     Payment as PaymentSchema,
     PaymentWithDetails,
@@ -13,7 +16,7 @@ from app.schemas.payment import (
     PaymentUpdate,
     PaymentReject,
 )
-from app.core.enums import PaymentStatus
+from app.core.enums import PaymentStatus, MessageType
 
 router = APIRouter()
 
@@ -109,6 +112,7 @@ def create_payment(
 def list_payments(
     contract_id: Optional[int] = Query(None),
     property_id: Optional[int] = Query(None),
+    property_title: Optional[str] = Query(None, description="按房源标题模糊搜索"),
     status: Optional[str] = Query(None),
     bill_type: Optional[str] = Query(None),
     due_date_from: Optional[datetime] = Query(None, description="截止日期起始（含）"),
@@ -121,6 +125,7 @@ def list_payments(
     """获取账单列表（根据角色过滤，支持日期范围和房源筛选）"""
     base_kwargs = dict(
         contract_id=contract_id, property_id=property_id,
+        property_title=property_title,
         status=status, bill_type=bill_type,
         due_date_from=due_date_from, due_date_to=due_date_to,
         skip=skip, limit=limit,
@@ -333,6 +338,67 @@ def reject_payment(
         ip_address=ip_address,
     )
     return _enrich_payment(db, updated)
+
+
+@router.post("/{payment_id}/remind")
+def remind_payment(
+    payment_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """房东提醒租客付款（发送通知消息）"""
+    payment = crud_payment.get_payment(db, payment_id)
+    if not payment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="账单不存在")
+    if payment.landlord_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+
+    property_title = ""
+    if payment.property_id:
+        prop = db.query(Property).filter(Property.id == payment.property_id).first()
+        property_title = prop.title if prop else ""
+
+    content = (
+        f"房东提醒您：请尽快支付账单「{payment.bill_no}」"
+        f"（{property_title}，金额 ¥{payment.due_amount}）。"
+        f"截止日期：{payment.due_date.strftime('%Y-%m-%d') if payment.due_date else '-'}。"
+    )
+
+    msg = Message(
+        from_user_id=current_user.id,
+        to_user_id=payment.tenant_id,
+        property_id=payment.property_id,
+        content=content,
+        message_type=MessageType.NOTIFICATION.value,
+    )
+    db.add(msg)
+    db.flush()
+    db.refresh(msg)
+
+    unread_before = crud_message.get_unread_count(db, user_id=payment.tenant_id, message_type="notification")
+
+    async def notify_tenant():
+        payload = {
+            "type": "new_message",
+            "message": {
+                "id": msg.id,
+                "from_user_id": msg.from_user_id,
+                "to_user_id": msg.to_user_id,
+                "content": msg.content,
+                "message_type": msg.message_type,
+                "property_id": msg.property_id,
+                "is_read": msg.is_read,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            },
+            "unread_count": unread_before + 1,
+        }
+        await ws_manager.send_personal(payload, msg.to_user_id)
+
+    background_tasks.add_task(notify_tenant)
+    db.commit()
+
+    return {"message": "提醒已发送", "payment_id": payment_id}
 
 
 @router.put("/{payment_id}")

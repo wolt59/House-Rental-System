@@ -215,15 +215,6 @@
       <el-button v-if="canExportPDF" type="success" size="large" @click="$emit('download-pdf')">
         下载PDF
       </el-button>
-      <!-- 编辑模式下，如果是部分签署且房东未签署，显示签署按钮 -->
-      <el-button 
-        v-if="canEdit && contract?.status === 'part_signed' && !contract?.signed_by_landlord" 
-        type="primary" 
-        size="large" 
-        @click="$emit('sign')"
-      >
-        签署合同
-      </el-button>
     </div>
   </div>
 </template>
@@ -329,17 +320,11 @@ const leaseMonths = computed(() => {
   return end.diff(start, 'month')
 })
 
-// 判断字段是否可编辑
+// 判断字段是否可编辑（只有草稿状态可编辑）
 function isEditable(fieldName) {
-  // DRAFT状态可编辑
   if (props.contract.status === 'draft') {
     return editableFieldsList.includes(fieldName)
   }
-  // PART_SIGNED状态，如果房东还没签署，也可以编辑（允许在签署前调整）
-  if (props.contract.status === 'part_signed' && !props.contract.signed_by_landlord) {
-    return editableFieldsList.includes(fieldName)
-  }
-  // 其他状态不可编辑
   return false
 }
 

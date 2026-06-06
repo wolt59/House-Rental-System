@@ -66,8 +66,18 @@
               </el-form-item>
             </el-col>
             <el-col :span="8">
-              <el-form-item label="户型描述">
-                <el-input v-model="form.floor_plan" placeholder="如：2室1厅1卫" :disabled="isFieldDisabled('floor_plan')" />
+              <el-form-item label="户型" class="floor-plan-form-item">
+                <div class="floor-plan-editor">
+                  <el-select v-model="form.bedrooms" placeholder="室" :disabled="isFieldDisabled('floor_plan')" @change="updateFloorPlan" style="flex:1;min-width:60px">
+                    <el-option v-for="n in 6" :key="n" :label="n + '室'" :value="n" />
+                  </el-select>
+                  <el-select v-model="form.livingrooms" placeholder="厅" :disabled="isFieldDisabled('floor_plan')" @change="updateFloorPlan" style="flex:1;min-width:60px">
+                    <el-option v-for="n in 3" :key="n" :label="n + '厅'" :value="n" />
+                  </el-select>
+                  <el-select v-model="form.bathrooms" placeholder="卫" :disabled="isFieldDisabled('floor_plan')" @change="updateFloorPlan" style="flex:1;min-width:60px">
+                    <el-option v-for="n in 4" :key="n" :label="n + '卫'" :value="n" />
+                  </el-select>
+                </div>
               </el-form-item>
             </el-col>
             <el-col :span="8">
@@ -338,6 +348,7 @@ const currentEditProperty = ref(null)
 const defaultForm = { 
   title: '', address: '', region: '', city: '', community_name: '',
   rental_type: '', floor_plan: '',
+  bedrooms: null, livingrooms: null, bathrooms: null,
   building_area: null,
   rent: null, deposit: null, payment_method: '',
   decoration: '', orientation: '', floor_number: '', total_floors: null,
@@ -356,6 +367,29 @@ const form = reactive({ ...defaultForm })
 // 核心字段定义（与后端一致，修改需重新审核）
 const CORE_FIELDS = ['address', 'floor_plan', 'area', 'rent', 'deposit', 'floor_number', 'total_floors']
 
+// 从 floor_plan 字符串解析室厅卫数量
+function parseFloorPlan(floorPlan) {
+  if (!floorPlan) return null
+  const match = floorPlan.match(/(\d+)\s*室\s*(\d+)\s*厅\s*(\d+)\s*卫/)
+  if (match) {
+    return {
+      bedrooms: parseInt(match[1]),
+      livingrooms: parseInt(match[2]),
+      bathrooms: parseInt(match[3]),
+    }
+  }
+  return null
+}
+
+// 根据室厅卫数量生成 floor_plan 字符串
+function updateFloorPlan() {
+  const parts = []
+  if (form.bedrooms != null) parts.push(form.bedrooms + '室')
+  if (form.livingrooms != null) parts.push(form.livingrooms + '厅')
+  if (form.bathrooms != null) parts.push(form.bathrooms + '卫')
+  form.floor_plan = parts.join('')
+}
+
 // 加载房源数据（编辑模式）
 onMounted(async () => {
   if (isEdit && propertyId) {
@@ -363,6 +397,15 @@ onMounted(async () => {
       const property = await getProperty(propertyId)
       currentEditProperty.value = property
       Object.keys(defaultForm).forEach((k) => { form[k] = property[k] ?? defaultForm[k] })
+      // 如果 API 未返回独立字段，从 floor_plan 解析
+      if ((form.bedrooms == null || form.livingrooms == null || form.bathrooms == null) && form.floor_plan) {
+        const parsed = parseFloorPlan(form.floor_plan)
+        if (parsed) {
+          form.bedrooms = parsed.bedrooms
+          form.livingrooms = parsed.livingrooms
+          form.bathrooms = parsed.bathrooms
+        }
+      }
     } catch (e) {
       ElMessage.error('加载房源数据失败')
     }
@@ -545,5 +588,16 @@ async function handleSubmit() {
   border-radius: 8px;
   text-align: center;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.floor-plan-editor {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.floor-plan-editor :deep(.el-select) {
+  flex: 1;
+  min-width: 60px;
 }
 </style>

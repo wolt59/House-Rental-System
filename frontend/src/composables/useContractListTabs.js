@@ -157,8 +157,8 @@ export function useContractTableColumns(activeTabRef) {
       showLeasePeriod: ['all', 'active', 'ended', 'applications'].includes(tab),
       showExpiringEndDate: tab === 'expiring',
       showDaysRemaining: tab === 'expiring',
-      showStatus: ['all', 'ended', 'applications'].includes(tab),
-      showSignColumns: tab === 'pending_sign',
+      showStatus: ['all', 'draft', 'pending_sign', 'ended', 'applications'].includes(tab),
+      showSignColumns: ['all', 'pending_sign', 'draft'].includes(tab),
       isApplication: tab === 'applications',
       operationWidth: simpleActions ? 108 : undefined,
       operationMinWidth: simpleActions

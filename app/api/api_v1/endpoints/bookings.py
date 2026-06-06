@@ -1,5 +1,5 @@
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session, joinedload
 
@@ -37,10 +37,14 @@ def create_booking(booking_in: BookingCreate, background_tasks: BackgroundTasks,
     if not property_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
 
-    # 修复时区比较问题：将前端时间转换为UTC时间（去除时区信息）
-    appointment_utc = booking_in.appointment_time.replace(tzinfo=None) if booking_in.appointment_time.tzinfo else booking_in.appointment_time
-    if appointment_utc < datetime.utcnow():
+    # 统一使用本地时间比较：去除时区信息后与服务器当前时间比较
+    appointment_time = booking_in.appointment_time
+    if appointment_time.tzinfo:
+        appointment_time = appointment_time.replace(tzinfo=None)
+    if appointment_time < datetime.now():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot book in the past")
+    if appointment_time > datetime.now() + timedelta(days=30):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking must be within 30 days from now")
 
     booking = crud_booking.create_booking(db, tenant_id=current_user.id, booking_in=booking_in)
 
@@ -98,6 +102,8 @@ def list_bookings(
         db: Session = Depends(get_db),
         current_user=Depends(get_current_active_user),
         status: Optional[str] = Query(None),
+        sort_by: Optional[str] = Query("appointment_time", description="排序字段: appointment_time / created_at"),
+        sort_order: Optional[str] = Query("asc", description="排序方向: asc / desc"),
         skip: int = Query(0),
         limit: int = Query(20)
 ):
@@ -117,6 +123,13 @@ def list_bookings(
             query = query.filter(Booking.status == status_list[0])
         else:
             query = query.filter(Booking.status.in_(status_list))
+
+    # 排序
+    sort_column = Booking.appointment_time if sort_by == "appointment_time" else Booking.created_at
+    if sort_order == "desc":
+        query = query.order_by(sort_column.desc())
+    else:
+        query = query.order_by(sort_column.asc())
 
     return query.offset(skip).limit(limit).all()
 

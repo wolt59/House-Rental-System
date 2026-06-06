@@ -5,6 +5,7 @@ from sqlalchemy import and_
 
 from app.models.payment import Payment
 from app.models.contract import Contract
+from app.models.property import Property
 from app.schemas.payment import PaymentCreate, PaymentSubmit, PaymentUpdate
 from app.core.enums import PaymentStatus, BillType, ContractStatus
 
@@ -34,6 +35,7 @@ def get_payments(
     tenant_id: Optional[int] = None,
     landlord_id: Optional[int] = None,
     property_id: Optional[int] = None,
+    property_title: Optional[str] = None,
     status: Optional[str] = None,
     bill_type: Optional[str] = None,
     due_date_from: Optional[datetime] = None,
@@ -50,6 +52,10 @@ def get_payments(
         query = query.filter(Payment.landlord_id == landlord_id)
     if property_id is not None:
         query = query.filter(Payment.property_id == property_id)
+    if property_title:
+        query = query.join(Property, Payment.property_id == Property.id).filter(
+            Property.title.ilike(f"%{property_title}%")
+        )
     if status is not None:
         query = query.filter(Payment.status == status)
     if bill_type is not None:

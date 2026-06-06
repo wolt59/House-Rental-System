@@ -100,9 +100,15 @@ def cancel_contract(db: Session, contract: Contract) -> Contract:
 
 
 def reject_contract(db: Session, contract: Contract, reason: Optional[str] = None) -> Contract:
-    """拒绝合同"""
-    contract.status = ContractStatus.REJECTED
+    """拒绝签署合同 → 恢复草稿状态，清除房东签名"""
+    contract.status = ContractStatus.DRAFT
     contract.terminate_reason = reason
+    # 清除房东签名（如有），回到可编辑状态
+    contract.signed_by_landlord = 0
+    contract.landlord_signed_at = None
+    contract.landlord_signature_image = None
+    contract.landlord_sign_device = None
+    contract.landlord_sign_ip = None
     db.commit()
     db.refresh(contract)
     return contract
@@ -118,33 +124,36 @@ def withdraw_signature(db: Session, contract: Contract, user_role: str) -> Contr
     if contract.status in [ContractStatus.TERMINATED, ContractStatus.CANCELLED, ContractStatus.EXPIRED]:
         raise ValueError("当前状态的合同不允许撤回签署")
     
-    # 只有部分签署或待签约状态才能撤回
-    if contract.status not in [ContractStatus.PART_SIGNED, ContractStatus.PENDING_SIGN, ContractStatus.PENDING_LANDLORD_SIGN, ContractStatus.PENDING_TENANT_SIGN]:
+    # 只有 pending_sign 或 part_signed 状态才能撤回（向后兼容）
+    if contract.status not in [ContractStatus.PENDING_SIGN, ContractStatus.PART_SIGNED, 
+                                 ContractStatus.PENDING_LANDLORD_SIGN, ContractStatus.PENDING_TENANT_SIGN]:
         raise ValueError("当前状态不允许撤回签署")
 
     if user_role == "landlord":
         if not contract.signed_by_landlord:
             raise ValueError("房东尚未签署此合同")
+        # 房东撤回签署 → 恢复草稿状态，清除房东签名
         contract.signed_by_landlord = 0
         contract.landlord_signed_at = None
-        # 如果租客已签，状态变为待房东签约；否则变为待签约
-        if contract.signed_by_tenant:
-            contract.status = ContractStatus.PENDING_LANDLORD_SIGN
-        else:
-            contract.status = ContractStatus.PENDING_SIGN
-            # 双方都未签署，恢复房源状态
-            restore_property_status_on_cancel(db, contract.property_id)
+        contract.landlord_signature_image = None
+        contract.landlord_sign_device = None
+        contract.landlord_sign_ip = None
+        contract.status = ContractStatus.DRAFT
+        # 恢复房源状态
+        restore_property_status_on_cancel(db, contract.property_id)
     elif user_role == "tenant":
         if not contract.signed_by_tenant:
             raise ValueError("租客尚未签署此合同")
+        # 租客撤回签署 → 待房东签署，清除租客签名
         contract.signed_by_tenant = 0
         contract.tenant_signed_at = None
-        # 如果房东已签，状态变为待租客签约；否则变为待签约
+        contract.tenant_signature_image = None
+        contract.tenant_sign_device = None
+        contract.tenant_sign_ip = None
         if contract.signed_by_landlord:
-            contract.status = ContractStatus.PENDING_TENANT_SIGN
-        else:
             contract.status = ContractStatus.PENDING_SIGN
-            # 双方都未签署，恢复房源状态
+        else:
+            contract.status = ContractStatus.DRAFT
             restore_property_status_on_cancel(db, contract.property_id)
     else:
         raise ValueError("无效的用户角色")

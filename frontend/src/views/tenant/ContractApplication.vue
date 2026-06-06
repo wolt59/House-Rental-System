@@ -21,7 +21,7 @@
         <el-descriptions-item label="租金">{{ propertyInfo?.rent ? `¥${propertyInfo.rent}/月` : '-' }}</el-descriptions-item>
         <el-descriptions-item label="押金">{{ propertyInfo?.deposit ? `¥${propertyInfo.deposit}` : '-' }}</el-descriptions-item>
         <el-descriptions-item label="面积">{{ propertyInfo?.area ? `${propertyInfo.area}㎡` : '-' }}</el-descriptions-item>
-        <el-descriptions-item label="户型">{{ propertyInfo?.layout || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="户型">{{ propertyInfo?.floor_plan || '-' }}</el-descriptions-item>
       </el-descriptions>
 
       <!-- 合约申请表单 -->

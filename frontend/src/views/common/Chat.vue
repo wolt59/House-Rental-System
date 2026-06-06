@@ -282,6 +282,7 @@ async function selectConversation(conv) {
       await markConversationRead(conv.participant.id)
       totalUnread.value = Math.max(0, totalUnread.value - conv.unread_count)
       conv.unread_count = 0
+      window.dispatchEvent(new CustomEvent('unread-changed'))
     } catch (e) {
       console.error('markConversationRead failed:', e)
     }

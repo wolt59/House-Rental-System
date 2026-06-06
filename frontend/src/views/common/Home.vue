@@ -73,7 +73,7 @@ function getCoverImage(p) {
     const cover = p.images.find((i) => i.is_cover === 1)
     return cover?.image_url || p.images[0].image_url
   }
-  return 'https://via.placeholder.com/300x200?text=No+Image'
+  return 'data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect fill="%23e8e8e8" width="300" height="200"/><text fill="%23999999" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle" dy=".3em">暂无图片</text></svg>'
 }
 
 function formatDate(d) {

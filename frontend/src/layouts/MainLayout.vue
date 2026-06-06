@@ -196,7 +196,7 @@ async function fetchUnreadCount() {
 
 onMounted(() => {
   fetchUnreadCount()
-  unreadTimer = setInterval(fetchUnreadCount, 30000)
+  unreadTimer = setInterval(fetchUnreadCount, 10000)
   window.addEventListener('unread-changed', fetchUnreadCount)
 })
 

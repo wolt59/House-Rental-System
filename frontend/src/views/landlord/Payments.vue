@@ -23,9 +23,23 @@
 
     <!-- 筛选 -->
     <div class="filter-bar">
-      <el-select v-model="filters.property_id" placeholder="全部房源" clearable style="width: 160px" @change="loadData">
+      <el-select
+        v-model="filters.property_id"
+        placeholder="按房源筛选"
+        clearable
+        filterable
+        style="width: 200px"
+        @change="loadData"
+      >
         <el-option v-for="p in myProperties" :key="p.id" :label="p.title" :value="p.id" />
       </el-select>
+      <el-input
+        v-model="filters.property_title"
+        placeholder="搜索房源标题关键词..."
+        clearable
+        style="width: 220px; margin-left: 10px"
+        @input="onTitleSearch"
+      />
       <el-select v-model="filters.status" placeholder="状态筛选" clearable style="width: 140px; margin-left: 10px" @change="loadData">
         <el-option v-for="(v, k) in statusMap" :key="k" :label="v" :value="k" />
       </el-select>
@@ -87,6 +101,15 @@
           </el-button>
           <el-button v-if="row.status === 'submitted'" type="danger" size="small" @click="openRejectDialog(row)">
             驳回
+          </el-button>
+          <el-button
+            v-if="row.status === 'pending' || row.status === 'overdue'"
+            type="warning"
+            size="small"
+            :loading="remindingId === row.id"
+            @click="handleRemind(row)"
+          >
+            提醒付款
           </el-button>
           <el-button type="info" size="small" plain @click="openDetailDialog(row)">详情</el-button>
         </template>
@@ -155,7 +178,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { getPayments, getPaymentStats, confirmPayment, rejectPayment } from '../../api/payment'
+import { getPayments, getPaymentStats, confirmPayment, rejectPayment, remindPayment } from '../../api/payment'
 import { getMyProperties } from '../../api/property'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -182,6 +205,7 @@ const dateRange = ref([defaultRange.from, defaultRange.to])
 
 const filters = reactive({
   property_id: '',
+  property_title: '',
   status: '',
   bill_type: '',
   due_date_from: defaultRange.from + 'T00:00:00',
@@ -194,6 +218,7 @@ const showRejectDialog = ref(false)
 const showDetailDialog = ref(false)
 const currentBill = ref(null)
 const rejecting = ref(false)
+const remindingId = ref(null)
 const rejectForm = reactive({ reason: '' })
 
 const statusMap = {
@@ -224,6 +249,12 @@ function onDateRangeChange(val) {
   loadData()
 }
 
+let titleTimer = null
+function onTitleSearch() {
+  if (titleTimer) clearTimeout(titleTimer)
+  titleTimer = setTimeout(() => loadData(), 300)
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -232,6 +263,7 @@ async function loadData() {
       limit: pageSize.value,
     }
     if (filters.property_id) params.property_id = filters.property_id
+    if (filters.property_title) params.property_title = filters.property_title
     if (filters.status) params.status = filters.status
     if (filters.bill_type) params.bill_type = filters.bill_type
     if (filters.due_date_from) params.due_date_from = filters.due_date_from
@@ -278,6 +310,25 @@ async function handleConfirm(row) {
     if (e !== 'cancel' && e?.response) {
       ElMessage.error(e.response.data?.detail || '操作失败')
     }
+  }
+}
+
+async function handleRemind(row) {
+  if (remindingId.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确认向租客发送付款提醒？\n\n账单：${row.bill_no}\n金额：¥${row.due_amount}\n房源：${row.property_title || '-'}`,
+      '提醒付款',
+      { confirmButtonText: '发送提醒', cancelButtonText: '取消', type: 'warning' }
+    )
+    remindingId.value = row.id
+    await remindPayment(row.id)
+    ElMessage.success('提醒已发送')
+  } catch (e) {
+    if (e === 'cancel') return
+    ElMessage.error(e?.response?.data?.detail || '发送失败')
+  } finally {
+    remindingId.value = null
   }
 }
 

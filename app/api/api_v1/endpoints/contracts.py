@@ -298,9 +298,9 @@ def sign_contract_landlord(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权签署此合同")
     if contract.signed_by_landlord:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="房东已签署此合同")
-    # 允许草稿、待签署、部分签署状态的合同进行签署
-    if contract.status in [ContractStatus.CANCELLED, ContractStatus.TERMINATED, ContractStatus.EXPIRED]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="已结束的合同不能签署")
+    # 只有草稿状态的合同才能由房东签署
+    if contract.status != ContractStatus.DRAFT:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="只有草稿状态的合同可以签署")
 
     # 记录签署信息（包括手写签名）
     device_info = sign_request.device_info
@@ -312,17 +312,18 @@ def sign_contract_landlord(
     contract.landlord_sign_device = device_info
     contract.landlord_signature_image = signature_image
 
-    # 如果合同是草稿状态，先转为待签署状态
-    status_str = str(contract.status) if contract.status else ""
-    if status_str == "draft":
-        contract.status = ContractStatus.PENDING_SIGN
-
     if contract.signed_by_tenant:
         # 双方都已签署，合同生效
         contract.status = ContractStatus.ACTIVE
         property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
         if property_obj:
             property_obj.status = PropertyStatus.RENTED
+
+        # 自动生成押金和租金账单
+        try:
+            crud_payment.generate_bills_for_contract(db, contract)
+        except Exception as e:
+            print(f"生成账单失败: {e}")
 
         # 通知租客合同已生效
         _send_message_to_user(
@@ -334,7 +335,8 @@ def sign_contract_landlord(
             background_tasks=background_tasks,
         )
     else:
-        contract.status = ContractStatus.PART_SIGNED
+        # 房东已签署，等待租客签署
+        contract.status = ContractStatus.PENDING_SIGN
 
         # 通知租客来签署
         _send_message_to_user(
@@ -394,11 +396,11 @@ def sign_contract_tenant(
             detail="房东尚未签署此合同，请等待房东先签署"
         )
     
-    # 只允许在部分签署或待租客签署状态下签署（即房东已签）
-    if contract.status not in [ContractStatus.PART_SIGNED, ContractStatus.PENDING_TENANT_SIGN]:
+    # 只有待签署（房东已签）状态的合同租客才能签署
+    if contract.status != ContractStatus.PENDING_SIGN:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="当前状态不允许签署，请等待房东先签署"
+            detail="当前状态不允许签署，只有待签署状态的合同可以签署"
         )
 
     # 记录签署信息（包括手写签名）
@@ -411,39 +413,27 @@ def sign_contract_tenant(
     contract.tenant_sign_device = device_info
     contract.tenant_signature_image = signature_image
 
-    # 如果合同是草稿状态，先转为待签署状态
-    status_str = str(contract.status) if contract.status else ""
-    if status_str == "draft":
-        contract.status = ContractStatus.PENDING_SIGN
+    # 房东已签署，租客签署后合同生效
+    contract.status = ContractStatus.ACTIVE
+    property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
+    if property_obj:
+        property_obj.status = PropertyStatus.RENTED
 
-    if contract.signed_by_landlord:
-        # 双方都已签署，合同生效
-        contract.status = ContractStatus.ACTIVE
-        property_obj = db.query(Property).filter(Property.id == contract.property_id).first()
-        if property_obj:
-            property_obj.status = PropertyStatus.RENTED
+    # 自动生成押金和租金账单
+    try:
+        crud_payment.generate_bills_for_contract(db, contract)
+    except Exception as e:
+        print(f"生成账单失败: {e}")
 
-        # 通知房东合同已生效
-        _send_message_to_user(
-            db=db,
-            from_user_id=current_user.id,
-            to_user_id=contract.landlord_id,
-            content=f"租赁合同（编号：{contract.contract_no}）已由租客签署，合同正式生效。",
-            property_id=contract.property_id,
-            background_tasks=background_tasks,
-        )
-    else:
-        contract.status = ContractStatus.PART_SIGNED
-
-        # 通知房东来签署
-        _send_message_to_user(
-            db=db,
-            from_user_id=current_user.id,
-            to_user_id=contract.landlord_id,
-            content=f"租客已签署租赁合同（编号：{contract.contract_no}），请您登录系统完成签署。",
-            property_id=contract.property_id,
-            background_tasks=background_tasks,
-        )
+    # 通知房东合同已生效
+    _send_message_to_user(
+        db=db,
+        from_user_id=current_user.id,
+        to_user_id=contract.landlord_id,
+        content=f"租赁合同（编号：{contract.contract_no}）已由租客签署，合同正式生效。",
+        property_id=contract.property_id,
+        background_tasks=background_tasks,
+    )
 
     crud_audit.create_audit_log(
         db,

@@ -2,6 +2,15 @@
   <div class="page-container">
     <div class="page-header">
       <h2>我的预约</h2>
+      <div class="sort-controls">
+        <el-select v-model="sortBy" size="small" style="width: 130px" @change="loadData">
+          <el-option label="按预约时间" value="appointment_time" />
+          <el-option label="按创建时间" value="created_at" />
+        </el-select>
+        <el-button size="small" @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'; loadData()">
+          {{ sortOrder === 'asc' ? '↑ 升序' : '↓ 降序' }}
+        </el-button>
+      </div>
     </div>
     
     <el-tabs v-model="activeTab" @tab-change="loadData">
@@ -41,7 +50,7 @@
       </el-table-column>
     </el-table>
     <el-empty v-if="!loading && bookings.length === 0" description="暂无数据" />
-    <div class="pagination-wrap" v-if="total >= pageSize">
+    <div class="pagination-wrap" v-if="total >= pageSize && activeTab !== 'all'">
       <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
     </div>
 
@@ -79,6 +88,8 @@ const total = ref(0)
 const pageSize = ref(10)
 const currentPage = ref(1)
 const activeTab = ref('all')
+const sortBy = ref('appointment_time')
+const sortOrder = ref('asc')
 const detailVisible = ref(false)
 const currentItem = ref(null)
 const bookingWithApplications = ref(new Set()) // 存储已有申请的booking_id
@@ -135,15 +146,17 @@ async function loadData() {
   try {
     const params = { 
       skip: (currentPage.value - 1) * pageSize.value, 
-      limit: pageSize.value 
+      limit: pageSize.value,
+      sort_by: sortBy.value,
+      sort_order: sortOrder.value
     }
     
-    // 未来日程：显示已同意且预约时间在未来
+    // 未来日程：后端筛选已同意状态，前端再按时间过滤
     if (activeTab.value === 'upcoming') {
-      const res = await getBookings(params)
+      const res = await getBookings({ status: 'approved', skip: 0, limit: 100, sort_by: sortBy.value, sort_order: sortOrder.value })
       const allBookings = Array.isArray(res) ? res : []
       const now = new Date()
-      bookings.value = allBookings.filter(b => b.status === 'approved' && new Date(b.appointment_time) > now)
+      bookings.value = allBookings.filter(b => new Date(b.appointment_time) > now)
       total.value = bookings.value.length
       return
     }
@@ -160,6 +173,10 @@ async function loadData() {
     // 其他标签页按原逻辑处理
     if (activeTab.value !== 'all') {
       params.status = activeTab.value
+    } else {
+      // "全部"展示所有记录，不做分页
+      params.limit = 9999
+      params.skip = 0
     }
     const res = await getBookings(params)
     bookings.value = Array.isArray(res) ? res : []
@@ -183,9 +200,8 @@ async function handleRequestContract(row) {
     return
   }
   try {
-    const res = await autoCreateContract({ property_id: row.property_id })
-    ElMessage.success('合同已自动创建，请前往“我的合同”签署')
-    loadData()
+    await autoCreateContract({ property_id: row.property_id })
+    ElMessage.success('合同已自动创建，请前往"我的合同"签署')
     setTimeout(() => router.push('/tenant/contracts'), 1500)
   } catch (e) {
     const msg = e.response?.data?.detail || '创建合同失败'
@@ -202,7 +218,13 @@ async function handleComplete(row) {
   try {
     await completeBooking(row.id)
     ElMessage.success('已标记为完成，现在可以发起合约申请')
-    loadData()
+    row.status = 'completed'
+    row.updated_at = new Date().toISOString()
+    // 如果当前在「未来日程」tab，移除已完成的记录
+    if (activeTab.value === 'upcoming') {
+      const idx = bookings.value.findIndex(b => b.id === row.id)
+      if (idx !== -1) { bookings.value.splice(idx, 1); total.value = Math.max(0, total.value - 1) }
+    }
   } catch (e) {
     ElMessage.error('操作失败')
   }
@@ -217,7 +239,14 @@ async function handleCancel(row) {
   try {
     await updateBooking(row.id, { status: 'cancelled', cancel_reason: '租客主动取消' })
     ElMessage.success('已取消')
-    loadData()
+    row.status = 'cancelled'
+    row.cancel_reason = '租客主动取消'
+    row.updated_at = new Date().toISOString()
+    // 当前在筛选tab且新状态不匹配时，从列表移除
+    if (!['all', 'cancelled'].includes(activeTab.value)) {
+      const idx = bookings.value.findIndex(b => b.id === row.id)
+      if (idx !== -1) { bookings.value.splice(idx, 1); total.value = Math.max(0, total.value - 1) }
+    }
   } catch (e) {
     ElMessage.error('取消预约失败')
   }
@@ -232,7 +261,13 @@ async function handleAcceptReschedule(row) {
   try {
     await respondReschedule(row.id, { response: 'accept' })
     ElMessage.success('已同意改期')
-    loadData()
+    row.status = 'approved'
+    row.updated_at = new Date().toISOString()
+    // 当前在「待协商」tab时，移除该记录
+    if (activeTab.value === 'negotiating') {
+      const idx = bookings.value.findIndex(b => b.id === row.id)
+      if (idx !== -1) { bookings.value.splice(idx, 1); total.value = Math.max(0, total.value - 1) }
+    }
   } catch (e) {
     ElMessage.error('操作失败')
   }
@@ -245,9 +280,15 @@ async function handleRejectReschedule(row) {
       cancelButtonText: '取消',
       inputPlaceholder: '拒绝原因',
     })
-    await respondReschedule(row.id, { response: 'reject', message: value })
+    await respondReschedule(row.id, { response: 'reject', message: value || '' })
     ElMessage.success('已拒绝改期')
-    loadData()
+    row.status = 'pending'
+    row.updated_at = new Date().toISOString()
+    // 当前在「待协商」tab时，移除该记录
+    if (activeTab.value === 'negotiating') {
+      const idx = bookings.value.findIndex(b => b.id === row.id)
+      if (idx !== -1) { bookings.value.splice(idx, 1); total.value = Math.max(0, total.value - 1) }
+    }
   } catch (e) {
     if (e !== 'cancel') {
       ElMessage.error('操作失败')
@@ -290,8 +331,6 @@ async function showContractApplicationDialog(row) {
     
     // 更新本地状态，隐藏按钮
     bookingWithApplications.value.add(row.id)
-    
-    loadData()
   } catch (e) {
     const msg = e.response?.data?.detail || '提交失败，请稍后重试'
     ElMessage.error(msg)
@@ -302,6 +341,8 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+.page-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.sort-controls { display: flex; gap: 8px; align-items: center; }
 .pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
 
 /* 让表格占满容器宽度 */

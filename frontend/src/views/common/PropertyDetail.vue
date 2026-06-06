@@ -260,7 +260,11 @@
                 type="datetime" 
                 placeholder="选择日期和时间" 
                 style="width: 100%" 
-                :disabled-date="d => d.getTime() < Date.now() - 86400000" 
+                :disabled-date="d => {
+                  const today = new Date(new Date().toDateString());
+                  const maxDate = new Date(today.getTime() + 30 * 86400000);
+                  return d.getTime() < today.getTime() || d.getTime() > maxDate.getTime();
+                }" 
                 :default-time="new Date(2000, 1, 1, 10, 0, 0)"
               />
             </el-form-item>
@@ -301,6 +305,11 @@ const bookingFormRef = ref(null)
 
 const bookingRules = {
   appointment_time: [{ required: true, message: '请选择预约时间', trigger: 'change' }],
+}
+
+function formatLocalISO(date) {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 const statusType = computed(() => {
@@ -345,7 +354,7 @@ async function loadData() {
       const cover = res.images.find((i) => i.is_cover === 1)
       currentImage.value = cover?.image_url || res.images[0].image_url
     } else {
-      currentImage.value = 'https://via.placeholder.com/600x400?text=No+Image'
+      currentImage.value = 'data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect fill="%23e8e8e8" width="600" height="400"/><text fill="%23999999" font-family="sans-serif" font-size="18" x="50%25" y="50%25" text-anchor="middle" dy=".3em">暂无图片</text></svg>'
     }
   } catch (e) {
     ElMessage.error('加载房源详情失败')
@@ -361,7 +370,7 @@ async function handleBooking() {
   try {
     await createBooking({
       property_id: parseInt(route.params.id),
-      appointment_time: bookingForm.value.appointment_time.toISOString(),
+      appointment_time: formatLocalISO(bookingForm.value.appointment_time),
       note: bookingForm.value.note,
     })
     ElMessage.success('预约成功')

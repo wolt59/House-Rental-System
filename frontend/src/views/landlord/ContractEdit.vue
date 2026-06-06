@@ -106,11 +106,10 @@ const alertDescription = computed(() => {
   return '合同已部分签署，您可以在签署前调整合同内容，然后通过下方签署区域完成签署。'
 })
 
-// 合同是否可以编辑
+// 合同是否可以编辑（只有草稿状态可编辑）
 const isEditableState = computed(() => {
   if (!contract.value) return false
-  const s = contract.value.status
-  return s === 'draft' || (s === 'part_signed' && !contract.value.signed_by_landlord)
+  return contract.value.status === 'draft'
 })
 
 // 启动签署模式（从URL参数或手动触发）
@@ -277,23 +276,13 @@ async function handleSaveDraft() {
       return
     }
 
-    // 保存前如果是从草稿改为待签署，先设置状态
-    if (c.status === 'draft') {
-      updateData.status = 'pending_sign'
-    }
-
     await updateContract(c.id, updateData)
-    ElMessage.success('合同草稿已保存，已发起签署流程')
+    ElMessage.success('合同草稿已保存')
 
     // 更新本地数据
     Object.keys(updateData).forEach(key => {
-      if (key !== 'status') {
-        contract.value[key] = currentFields[key] ?? updateData[key]
-      }
+      contract.value[key] = currentFields[key] ?? updateData[key]
     })
-    if (updateData.status === 'pending_sign') {
-      contract.value.status = 'pending_sign'
-    }
 
     // 重新加载
     await loadContract()
@@ -319,19 +308,68 @@ async function handleSaveDraft() {
   }
 }
 
+// 获取当前可编辑字段的值（从子组件读取，兼容初始为空的情况）
+function getCurrentFields() {
+  const docEl = documentRef.value
+  const c = contract.value
+  const currentFields = docEl?.editableFields ? { ...docEl.editableFields } : {}
+
+  return {
+    monthly_rent: currentFields.monthly_rent ?? c?.monthly_rent ?? 0,
+    deposit: currentFields.deposit ?? c?.deposit ?? 0,
+    payment_method: currentFields.payment_method || c?.payment_method || '',
+    payment_day: currentFields.payment_day ?? c?.payment_day ?? 1,
+    early_termination_days: currentFields.early_termination_days ?? c?.early_termination_days ?? 30,
+    renewal_notice_days: currentFields.renewal_notice_days ?? c?.renewal_notice_days ?? 30,
+    property_fee_bearer: currentFields.property_fee_bearer || c?.property_fee_bearer || '',
+    utility_fee_bearer: currentFields.utility_fee_bearer || c?.utility_fee_bearer || '',
+    other_fee_bearer: currentFields.other_fee_bearer || c?.other_fee_bearer || '',
+    allow_pets: currentFields.allow_pets ?? c?.allow_pets ?? 0,
+  }
+}
+
+// 校验签署前必填字段
+function validateBeforeSign() {
+  const f = getCurrentFields()
+  const errors = []
+
+  if (!f.monthly_rent || f.monthly_rent <= 0) errors.push('月租金（¥）不能为空')
+  if (f.payment_method.trim() === '') errors.push('付款方式未选择')
+  if (!f.payment_day || f.payment_day < 1) errors.push('租金支付日期未填写')
+  if (!f.early_termination_days || f.early_termination_days < 1) errors.push('提前解约通知天数未填写')
+  if (!f.renewal_notice_days || f.renewal_notice_days < 1) errors.push('续租提醒天数未填写')
+  if (!f.property_fee_bearer) errors.push('物业管理费承担方未选择')
+  if (!f.utility_fee_bearer) errors.push('水电燃气费承担方未选择')
+  if (!f.other_fee_bearer) errors.push('网络/电视费承担方未选择')
+
+  return errors
+}
+
 // 进入签署模式
 function startSigning() {
-  // 检查合同是否在可签署状态
   if (!contract.value) return
   const s = contract.value.status
-  if (!['draft', 'pending_sign', 'pending_landlord_sign', 'part_signed'].includes(s)) {
-    ElMessage.warning('当前合同状态不允许签署')
+  // 只有草稿状态可以发起签署
+  if (s !== 'draft') {
+    ElMessage.warning('只有草稿状态的合同可以签署')
     return
   }
   if (contract.value.signed_by_landlord) {
     ElMessage.warning('您已经签署过此合同')
     return
   }
+
+  // 字段校验
+  const errors = validateBeforeSign()
+  if (errors.length > 0) {
+    ElMessageBox.alert(
+      '以下字段尚未填写完整，请补充后再签署：<br/><br/>' + errors.map((e, i) => `${i + 1}. ${e}`).join('<br/>'),
+      '请完善合同信息',
+      { dangerouslyUseHTMLString: true, confirmButtonText: '去修改', type: 'warning' }
+    )
+    return
+  }
+
   isSigning.value = true
 
   nextTick(() => {

@@ -18,10 +18,13 @@ def get_messages_received(
     is_read: Optional[bool] = None,
     skip: int = 0,
     limit: int = 20,
+    message_types: Optional[List[str]] = None,
 ) -> List[Message]:
     query = db.query(Message).filter(Message.to_user_id == to_user_id)
     if is_read is not None:
         query = query.filter(Message.is_read == is_read)
+    if message_types:
+        query = query.filter(Message.message_type.in_(message_types))
     return query.order_by(Message.created_at.desc()).offset(skip).limit(limit).all()
 
 

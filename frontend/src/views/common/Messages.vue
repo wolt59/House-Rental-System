@@ -114,6 +114,7 @@ async function handleMarkRead(msg) {
   try {
     await markMessageRead(msg.id)
     msg.is_read = true
+    window.dispatchEvent(new CustomEvent('unread-changed'))
     ElMessage.success('已标为已读')
   } catch (e) {
     ElMessage.error('标记已读失败')

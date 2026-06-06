@@ -65,12 +65,14 @@ def list_received_messages(
     unread: Optional[bool] = None,
     skip: int = 0,
     limit: int = 20,
+    type: Optional[str] = Query(None, description="Filter by message type: system,notification (comma separated)"),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     is_read = None if unread is None else not unread
+    message_types = [t.strip() for t in type.split(",") if t.strip()] if type else None
     return crud_message.get_messages_received(
-        db, to_user_id=current_user.id, is_read=is_read, skip=skip, limit=limit
+        db, to_user_id=current_user.id, is_read=is_read, skip=skip, limit=limit, message_types=message_types,
     )
 
 

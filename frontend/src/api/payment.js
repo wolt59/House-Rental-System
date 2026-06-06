@@ -28,6 +28,10 @@ export function rejectPayment(id, data) {
   return request.put(`/api/v1/payments/${id}/reject`, data)
 }
 
+export function remindPayment(id) {
+  return request.post(`/api/v1/payments/${id}/remind`)
+}
+
 export function updatePayment(id, data) {
   return request.put(`/api/v1/payments/${id}`, data)
 }

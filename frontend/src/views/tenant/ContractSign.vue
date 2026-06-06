@@ -134,6 +134,13 @@ async function loadContract() {
 // 处理签名确认
 async function handleSignatureConfirm(signatureData) {
   if (isSubmitting.value) return
+
+  // 签署前校验必填字段
+  const errors = validateContractFields()
+  if (errors.length > 0) {
+    ElMessage.warning(errors[0])
+    return
+  }
   
   try {
     isSubmitting.value = true
@@ -162,6 +169,23 @@ async function handleSignatureConfirm(signatureData) {
   } finally {
     isSubmitting.value = false
   }
+}
+
+// 校验合同必填字段
+function validateContractFields() {
+  const c = contract.value
+  const errors = []
+
+  if (!c.monthly_rent || c.monthly_rent <= 0) errors.push('月租金（¥）未填写')
+  if (!c.payment_method || c.payment_method.trim() === '') errors.push('付款方式未选择')
+  if (!c.payment_day || c.payment_day < 1) errors.push('租金支付日期未填写')
+  if (!c.early_termination_days || c.early_termination_days < 1) errors.push('提前解约通知天数未填写')
+  if (!c.renewal_notice_days || c.renewal_notice_days < 1) errors.push('续租提醒天数未填写')
+  if (!c.property_fee_bearer) errors.push('物业管理费承担方未选择')
+  if (!c.utility_fee_bearer) errors.push('水电燃气费承担方未选择')
+  if (!c.other_fee_bearer) errors.push('网络/电视费承担方未选择')
+
+  return errors
 }
 
 // 返回上一页

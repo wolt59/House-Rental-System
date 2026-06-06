@@ -2,6 +2,15 @@
   <div class="page-container">
     <div class="page-header">
       <h2>预约管理</h2>
+      <div class="sort-controls">
+        <el-select v-model="sortBy" size="small" style="width: 130px" @change="loadData">
+          <el-option label="按预约时间" value="appointment_time" />
+          <el-option label="按创建时间" value="created_at" />
+        </el-select>
+        <el-button size="small" @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'; loadData()">
+          {{ sortOrder === 'asc' ? '↑ 升序' : '↓ 降序' }}
+        </el-button>
+      </div>
     </div>
     
     <el-tabs v-model="activeTab" @tab-change="loadData">
@@ -41,7 +50,7 @@
 
     </el-table>
     <el-empty v-if="!loading && bookings.length === 0" description="暂无数据" />
-    <div class="pagination-wrap" v-if="total >= pageSize">
+    <div class="pagination-wrap" v-if="total >= pageSize && activeTab !== 'all'">
       <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
     </div>
 
@@ -121,6 +130,8 @@ const total = ref(0)
 const pageSize = ref(10)
 const currentPage = ref(1)
 const activeTab = ref('all')
+const sortBy = ref('appointment_time')
+const sortOrder = ref('asc')
 const detailVisible = ref(false)
 const rejectVisible = ref(false)
 const rescheduleVisible = ref(false)
@@ -154,18 +165,24 @@ async function loadData() {
   try {
     const params = { 
       skip: (currentPage.value - 1) * pageSize.value, 
-      limit: pageSize.value 
+      limit: pageSize.value,
+      sort_by: sortBy.value,
+      sort_order: sortOrder.value
     }
     if (activeTab.value === 'pending') {
       params.status = 'pending'
     } else if (activeTab.value === 'processed') {
       params.status = 'approved,completed,rejected,cancelled,negotiating'
+    } else if (activeTab.value === 'all') {
+      // "全部"展示所有记录，不做分页
+      params.limit = 9999
+      params.skip = 0
     } else if (activeTab.value === 'upcoming') {
-      // 未来日程：显示已同意且预约时间在未来
-      const res = await getBookings(params)
+      // 未来日程：后端筛选已同意状态，前端再按时间过滤
+      const res = await getBookings({ status: 'approved', skip: 0, limit: 100, sort_by: sortBy.value, sort_order: sortOrder.value })
       const allBookings = Array.isArray(res) ? res : []
       const now = new Date()
-      bookings.value = allBookings.filter(b => b.status === 'approved' && new Date(b.appointment_time) > now)
+      bookings.value = allBookings.filter(b => new Date(b.appointment_time) > now)
       await resolveItems(bookings.value, ['tenant_id', 'property_id'])
       total.value = bookings.value.length
       return
@@ -190,7 +207,13 @@ async function handleApprove(row) {
   try {
     await approveBooking(row.id)
     ElMessage.success('已同意预约')
-    loadData()
+    row.status = 'approved'
+    row.updated_at = new Date().toISOString()
+    // 当前在「待处理」tab时，移除已处理的记录
+    if (activeTab.value === 'pending') {
+      const idx = bookings.value.findIndex(b => b.id === row.id)
+      if (idx !== -1) { bookings.value.splice(idx, 1); total.value = Math.max(0, total.value - 1) }
+    }
   } catch (e) { 
     ElMessage.error('操作失败') 
   }
@@ -212,7 +235,15 @@ async function submitReject() {
     await rejectBooking(currentItem.value.id, rejectForm.reason)
     ElMessage.success('已拒绝预约')
     rejectVisible.value = false
-    loadData()
+    const row = currentItem.value
+    row.status = 'rejected'
+    row.reject_reason = rejectForm.reason
+    row.updated_at = new Date().toISOString()
+    // 当前在「待处理」tab时，移除已处理的记录
+    if (activeTab.value === 'pending') {
+      const idx = bookings.value.findIndex(b => b.id === row.id)
+      if (idx !== -1) { bookings.value.splice(idx, 1); total.value = Math.max(0, total.value - 1) }
+    }
   } catch (e) { 
     ElMessage.error('操作失败') 
   } finally {
@@ -244,7 +275,15 @@ async function submitReschedule() {
     })
     ElMessage.success('已发送改期建议')
     rescheduleVisible.value = false
-    loadData()
+    const row = currentItem.value
+    row.status = 'negotiating'
+    row.reschedule_proposal = rescheduleForm.message
+    row.updated_at = new Date().toISOString()
+    // 当前在「待处理」tab时，移除已改期的记录
+    if (activeTab.value === 'pending') {
+      const idx = bookings.value.findIndex(b => b.id === row.id)
+      if (idx !== -1) { bookings.value.splice(idx, 1); total.value = Math.max(0, total.value - 1) }
+    }
   } catch (e) { 
     ElMessage.error('操作失败') 
   } finally {
@@ -261,7 +300,13 @@ async function handleComplete(row) {
   try {
     await completeBooking(row.id)
     ElMessage.success('已标记为完成')
-    loadData()
+    row.status = 'completed'
+    row.updated_at = new Date().toISOString()
+    // 当前在「未来日程」tab时，移除已完成的记录
+    if (activeTab.value === 'upcoming') {
+      const idx = bookings.value.findIndex(b => b.id === row.id)
+      if (idx !== -1) { bookings.value.splice(idx, 1); total.value = Math.max(0, total.value - 1) }
+    }
   } catch (e) { 
     ElMessage.error('操作失败') 
   }
@@ -276,6 +321,8 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+.page-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.sort-controls { display: flex; gap: 8px; align-items: center; }
 .pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
 
 /* 让表格占满容器宽度 */

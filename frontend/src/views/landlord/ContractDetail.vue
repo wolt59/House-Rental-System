@@ -16,10 +16,20 @@
     />
 
     <el-alert
-      v-else-if="contract?.status === 'pending_sign' || (contract?.status === 'part_signed' && !contract?.signed_by_landlord)"
+      v-else-if="!contract?.signed_by_landlord && ['draft', 'pending_sign', 'pending_landlord_sign', 'part_signed'].includes(contract?.status)"
       title="待您签署"
       type="warning"
       description="请仔细查看合同内容，确认无误后点击下方签署按钮。签署后合同内容将被锁定。"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 20px"
+    />
+
+    <el-alert
+      v-else-if="contract?.signed_by_landlord && !contract?.signed_by_tenant && ['pending_sign', 'part_signed'].includes(contract?.status)"
+      title="已签署，等待租客签署"
+      type="info"
+      description="您已完成签署，合同正在等待租客签署。"
       show-icon
       :closable="false"
       style="margin-bottom: 20px"
@@ -43,25 +53,23 @@
         :property-info="propertyInfo"
         :landlord-info="landlordInfo"
         :tenant-info="tenantInfo"
-        :can-edit="canEdit"
-        :can-sign="canSign"
+        :can-edit="false"
+        :can-sign="false"
         :can-export-pdf="canExportPDF"
         :show-actions="true"
-        @sign="handleSign"
-        @save-draft="handleSaveDraft"
         @download-pdf="handleDownloadPDF"
-        @field-change="handleFieldChange"
       />
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElLoading } from 'element-plus'
 import ContractDocument from '../common/ContractDocument.vue'
-import { getContract, updateContract } from '../../api/contract'
+import { getContract } from '../../api/contract'
+import { usePolling } from '../../composables/usePolling'
 import request from '../../utils/request'
 
 const route = useRoute()
@@ -73,20 +81,6 @@ const propertyInfo = ref(null)
 const landlordInfo = ref(null)
 const tenantInfo = ref(null)
 const loading = ref(false)
-
-// 是否可以编辑（只有草稿状态可以编辑）
-const canEdit = computed(() => {
-  if (!contract.value) return false
-  return contract.value.status === 'draft'
-})
-
-// 是否可以签署
-const canSign = computed(() => {
-  if (!contract.value) return false
-  // 房东可以在待签署、部分签署或待房东签署状态下进行签署
-  return !contract.value.signed_by_landlord && 
-         (contract.value.status === 'pending_sign' || contract.value.status === 'part_signed' || contract.value.status === 'pending_landlord_sign')
-})
 
 // 是否可以导出PDF（只有签署后的合同才能导出）
 const canExportPDF = computed(() => {
@@ -153,21 +147,6 @@ async function loadContract() {
   }
 }
 
-// 处理签署 - 跳转到签署页面
-function handleSign() {
-  router.push(`/landlord/contract/${route.params.id}/sign`)
-}
-
-// 保存草稿
-async function handleSaveDraft() {
-  try {
-    await updateContract(contract.value.id, contract.value)
-    ElMessage.success('草稿已保存')
-  } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '保存草稿失败')
-  }
-}
-
 // 导出 PDF
 async function handleDownloadPDF() {
   if (!contractDocRef.value) {
@@ -191,30 +170,50 @@ async function handleDownloadPDF() {
   }
 }
 
-// 处理字段变更
-async function handleFieldChange({ field, value }) {
-  if (!contract.value) return
-  
-  // 更新本地合同数据
-  contract.value[field] = value
-  
-  // 如果是草稿状态，自动保存
-  if (contract.value.status === 'draft') {
-    try {
-      await updateContract(contract.value.id, { [field]: value })
-      ElMessage.success('字段已更新')
-    } catch (e) {
-      ElMessage.error(e.response?.data?.detail || '更新字段失败')
-      // 恢复原值
-      loadContract()
-    }
-  }
-}
-
 // 返回
 function goBack() {
   router.push('/landlord/contracts')
 }
+
+// 判断合同是否处于过渡状态（需要轮询等待对方操作）
+function isTransitionalStatus() {
+  if (!contract.value) return false
+  const transitional = ['draft', 'pending_sign', 'part_signed', 'pending_landlord_sign', 'terminate_negotiating']
+  return transitional.includes(contract.value.status)
+}
+
+// 静默刷新合同数据（不显示 loading 和错误提示）
+async function silentRefresh() {
+  const contractId = route.params.id
+  if (!contractId) return
+  try {
+    const updated = await getContract(contractId)
+    // 只更新关键状态字段，避免覆盖用户正在查看的内容
+    contract.value.status = updated.status
+    contract.value.signed_by_landlord = updated.signed_by_landlord
+    contract.value.signed_by_tenant = updated.signed_by_tenant
+    contract.value.landlord_signature_image = updated.landlord_signature_image
+    contract.value.tenant_signature_image = updated.tenant_signature_image
+    contract.value.landlord_signed_at = updated.landlord_signed_at
+    contract.value.tenant_signed_at = updated.tenant_signed_at
+    contract.value.terminate_reason = updated.terminate_reason
+    contract.value.updated_at = updated.updated_at
+  } catch {
+    // 静默忽略轮询错误
+  }
+}
+
+// 轮询：过渡状态每 2 秒刷新
+const polling = usePolling(silentRefresh, 2000, {
+  shouldPoll: isTransitionalStatus,
+})
+
+// 当合同加载完成后启动轮询
+watch(contract, (val) => {
+  if (val) {
+    polling.start()
+  }
+})
 
 onMounted(() => {
   loadContract()

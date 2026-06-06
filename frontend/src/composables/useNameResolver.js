@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 import { getProperty } from '../api/property'
 import { useUserStore } from '../store/user'
+import request from '../utils/request'
 
 const userNames = reactive({})
 const propertyNames = reactive({})
@@ -16,15 +17,21 @@ export function useNameResolver() {
     if (!userId) return '-'
     const key = String(userId)
     if (userNames[key]) return userNames[key]
-    // Only admin can call getUser(id) for other users; non-admin gets 403.
     // If this is the current user, use store data directly.
     if (userStore.user && Number(key) === _currentUserId()) {
       userNames[key] = userStore.user.full_name || userStore.user.username || `用户#${key}`
       return userNames[key]
     }
-    // For other users, skip the API call and fall back to placeholder
-    userNames[key] = `用户#${key}`
-    return userNames[key]
+    // Try API call - backend allows lookup if related by contract/application
+    try {
+      const res = await request.get(`/api/v1/users/${key}`)
+      const u = res.data || res
+      userNames[key] = u.full_name || u.username || `用户#${key}`
+      return userNames[key]
+    } catch {
+      userNames[key] = `用户#${key}`
+      return userNames[key]
+    }
   }
 
   async function resolveProperty(propertyId) {

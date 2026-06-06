@@ -51,16 +51,6 @@
         </div>
       </div>
       <el-empty v-if="!loading && filteredNotifications.length === 0" description="暂无通知" />
-      <div class="pagination-wrap" v-if="total > pageSize">
-        <el-pagination
-          background
-          layout="prev, pager, next"
-          :total="total"
-          :page-size="pageSize"
-          v-model:current-page="currentPage"
-          @current-change="loadNotifications"
-        />
-      </div>
     </div>
   </div>
 </template>
@@ -82,9 +72,6 @@ const userStore = useUserStore()
 
 const notifications = ref([])
 const loading = ref(false)
-const currentPage = ref(1)
-const pageSize = 10
-const total = ref(0)
 const searchKeyword = ref('')
 const filterType = ref('')
 
@@ -134,16 +121,11 @@ async function loadNotifications() {
   loading.value = true
   try {
     const res = await getReceivedMessages({
-      skip: (currentPage.value - 1) * pageSize,
-      limit: pageSize,
+      skip: 0,
+      limit: 500,
+      type: 'system,notification',
     })
-    const all = Array.isArray(res) ? res : []
-    notifications.value = all.filter(
-      m => m.message_type === 'system' || m.message_type === 'notification'
-    )
-    total.value = all.filter(
-      m => m.message_type === 'system' || m.message_type === 'notification'
-    ).length
+    notifications.value = Array.isArray(res) ? res : []
   } catch (e) {
     ElMessage.error('加载通知失败')
   } finally {
@@ -151,11 +133,16 @@ async function loadNotifications() {
   }
 }
 
+function notifyBadgeRefresh() {
+  window.dispatchEvent(new CustomEvent('unread-changed'))
+}
+
 async function markAsRead(msg) {
   if (msg.is_read) return
   try {
     await markMessageRead(msg.id)
     msg.is_read = true
+    notifyBadgeRefresh()
   } catch (e) {
     console.error('markMessageRead failed:', e)
   }
@@ -166,6 +153,7 @@ async function markAllRead() {
   for (const msg of unreadList) {
     await markAsRead(msg)
   }
+  notifyBadgeRefresh()
   ElMessage.success('已全部标记为已读')
 }
 
@@ -174,6 +162,7 @@ function handleAction(msg) {
   if (!msg.is_read) {
     markMessageRead(msg.id).then(() => {
       msg.is_read = true
+      notifyBadgeRefresh()
     }).catch(() => {})
   }
   router.push(msg.link)
@@ -343,9 +332,5 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.pagination-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 16px 0;
-}
+
 </style>

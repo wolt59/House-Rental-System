@@ -116,25 +116,30 @@
       >
         <template #default="{ row }">
           <template v-if="row.status === 'draft'">
+            <el-popover
+              v-if="isRejectedDraft(row)"
+              placement="top"
+              :width="300"
+              trigger="hover"
+            >
+              <template #reference>
+                <el-tag type="danger" size="small" style="margin-right:4px; cursor:pointer">已被拒</el-tag>
+              </template>
+              <div>
+                <p style="margin:0; font-weight:bold; color:#f56c6c">拒绝原因：</p>
+                <p style="margin:4px 0 0; white-space: pre-wrap; word-break: break-all;">{{ row.terminate_reason }}</p>
+              </div>
+            </el-popover>
             <el-button type="primary" size="small" @click="editContract(row)">编辑</el-button>
             <el-button type="success" size="small" @click="handleSubmitDraft(row)">发起签署</el-button>
             <el-button type="info" size="small" @click="handleCancel(row)">取消</el-button>
           </template>
-          <template v-else-if="row.status === 'pending_sign' || row.status === 'pending_landlord_sign'">
+          <template v-else-if="row.status === 'pending_sign'">
+            <el-button v-if="canWithdraw(row)" type="warning" size="small" @click="handleWithdraw(row)">撤回签署</el-button>
+          </template>
+          <template v-else-if="row.status === 'pending_landlord_sign' || row.status === 'part_signed'">
             <el-button v-if="canSign(row)" type="primary" size="small" @click="handleSign(row)">签约</el-button>
             <el-button v-if="canWithdraw(row)" type="warning" size="small" @click="handleWithdraw(row)">撤回</el-button>
-            <el-button type="danger" size="small" @click="handleReject(row)">拒绝</el-button>
-            <el-button type="info" size="small" @click="handleCancel(row)">取消</el-button>
-          </template>
-          <template v-else-if="row.status === 'pending_tenant_sign'">
-            <el-button v-if="canWithdraw(row)" type="warning" size="small" @click="handleWithdraw(row)">撤回</el-button>
-            <el-button type="danger" size="small" @click="handleReject(row)">拒绝</el-button>
-            <el-button type="info" size="small" @click="handleCancel(row)">取消</el-button>
-          </template>
-          <template v-else-if="row.status === 'part_signed'">
-            <el-button v-if="canSign(row)" type="primary" size="small" @click="handleSign(row)">签约</el-button>
-            <el-button v-if="canWithdraw(row)" type="warning" size="small" @click="handleWithdraw(row)">撤回</el-button>
-            <el-button type="danger" size="small" @click="handleReject(row)">拒绝</el-button>
           </template>
           <template v-else-if="row.status === 'active'">
             <el-button type="danger" size="small" @click="handleTerminate(row)">终止</el-button>
@@ -169,7 +174,10 @@
         <el-descriptions-item label="备注">{{ currentContract.remark || '-' }}</el-descriptions-item>
         <el-descriptions-item label="房东签约">{{ currentContract.signed_by_landlord ? '是' : '否' }}</el-descriptions-item>
         <el-descriptions-item label="租客签约">{{ currentContract.signed_by_tenant ? '是' : '否' }}</el-descriptions-item>
-        <el-descriptions-item v-if="currentContract.terminate_reason" label="终止原因" :span="2">
+        <el-descriptions-item v-if="currentContract.terminate_reason && !isRejectedDraft(currentContract)" label="终止原因" :span="2">
+          {{ currentContract.terminate_reason }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="currentContract.terminate_reason && isRejectedDraft(currentContract)" label="拒绝原因" :span="2">
           {{ currentContract.terminate_reason }}
         </el-descriptions-item>
         <el-descriptions-item label="合同条款" :span="2">{{ currentContract.terms || '-' }}</el-descriptions-item>
@@ -361,6 +369,7 @@ import {
 } from '../../api/contract_termination'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNameResolver } from '../../composables/useNameResolver'
+import { usePolling } from '../../composables/usePolling'
 import {
   CONTRACT_TABS,
   useContractListTabs,
@@ -417,12 +426,26 @@ function formatDate(d) {
   return d ? new Date(d).toLocaleDateString('zh-CN') : ''
 }
 
+function isRejectedDraft(row) {
+  return row.status === 'draft' && !!row.terminate_reason
+}
+
 function canSign(row) {
-  return !row.signed_by_landlord && ['pending_sign', 'pending_landlord_sign', 'part_signed'].includes(row.status)
+  // 房东只能对草稿状态的合同进行签署（通过编辑页）
+  return !row.signed_by_landlord && row.status === 'draft'
 }
 
 function canWithdraw(row) {
-  return row.signed_by_landlord && ['pending_tenant_sign', 'part_signed'].includes(row.status)
+  // 房东只能撤回自己已签署且租客未签署的合同（pending_sign 状态）
+  return row.signed_by_landlord && !row.signed_by_tenant && ['pending_sign', 'part_signed'].includes(row.status)
+}
+
+// 在筛选 tab 中，如果当前 tab 需要过滤则移除
+function removeIfNotInTab(row, keepTabs) {
+  if (!keepTabs.includes(activeTab.value)) {
+    const idx = contracts.value.findIndex(c => c.id === row.id)
+    if (idx !== -1) contracts.value.splice(idx, 1)
+  }
 }
 
 async function loadData() {
@@ -463,7 +486,10 @@ async function handleWithdraw(row) {
   try {
     await withdrawSignatureLandlord(row.id)
     ElMessage.success('已撤回签署')
-    loadData()
+    row.status = 'draft'
+    row.signed_by_landlord = 0
+    row.updated_at = new Date().toISOString()
+    removeIfNotInTab(row, ['all', 'draft'])
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '撤回签署失败')
   }
@@ -478,7 +504,9 @@ async function handleCancel(row) {
   try {
     await cancelContract(row.id)
     ElMessage.success('合同已取消')
-    loadData()
+    row.status = 'cancelled'
+    row.updated_at = new Date().toISOString()
+    removeIfNotInTab(row, ['all'])
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '取消合同失败')
   }
@@ -496,7 +524,12 @@ async function confirmReject() {
     await rejectContract(currentContract.value.id, { reason: rejectForm.reason })
     ElMessage.success('已拒绝合同')
     rejectVisible.value = false
-    loadData()
+    const row = currentContract.value
+    row.status = 'draft'
+    row.signed_by_landlord = 0
+    row.terminate_reason = rejectForm.reason
+    row.updated_at = new Date().toISOString()
+    removeIfNotInTab(row, ['all', 'draft'])
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '拒绝合同失败')
   } finally {
@@ -536,7 +569,10 @@ async function confirmTerminate() {
     })
     ElMessage.success('已发起解约申请，等待对方确认')
     terminationRequestVisible.value = false
-    loadData()
+    const row = currentContract.value
+    row.status = 'terminate_negotiating'
+    row.updated_at = new Date().toISOString()
+    removeIfNotInTab(row, ['all', 'terminate_negotiating'])
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '发起解约申请失败')
   } finally {
@@ -577,7 +613,10 @@ async function confirmApproveTermination() {
     })
     ElMessage.success('已同意解约申请，合同已终止')
     approveTerminationVisible.value = false
-    loadData()
+    const row = currentTerminationContract.value
+    row.status = 'terminated'
+    row.updated_at = new Date().toISOString()
+    removeIfNotInTab(row, ['all', 'ended'])
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '同意解约失败')
   } finally {
@@ -609,7 +648,10 @@ async function confirmRejectTermination() {
     await rejectTerminationRequest(requests[0].id, rejectTerminationForm.reason)
     ElMessage.success('已拒绝解约申请')
     rejectTerminationVisible.value = false
-    loadData()
+    const row = currentTerminationContract.value
+    row.status = 'active'
+    row.updated_at = new Date().toISOString()
+    removeIfNotInTab(row, ['all', 'active'])
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '拒绝解约失败')
   } finally {
@@ -644,6 +686,14 @@ async function confirmApproveApp() {
     await approveApplication(currentApplication.value.id, { approved: true, response: approveAppForm.response })
     ElMessage.success('已同意合约申请，合同草稿已生成')
     approveAppVisible.value = false
+    // 更新本地状态：申请已处理，从列表中移除
+    currentApplication.value.status = 'apply_approved'
+    currentApplication.value.updated_at = new Date().toISOString()
+    // 当前在「合约申请」tab时，移除已处理的记录
+    const idx = applications.value.findIndex(a => a.id === currentApplication.value.id)
+    if (idx !== -1) applications.value.splice(idx, 1)
+    // 切换到草稿tab并刷新数据
+    activeTab.value = 'draft'
     loadData()
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '操作失败')
@@ -668,7 +718,11 @@ async function confirmRejectApp() {
     await rejectApplication(currentApplication.value.id, rejectAppForm.reason)
     ElMessage.success('已拒绝合约申请')
     rejectAppVisible.value = false
-    loadData()
+    // 更新本地状态
+    if (activeTab.value === 'applications') {
+      const idx = applications.value.findIndex(a => a.id === currentApplication.value.id)
+      if (idx !== -1) applications.value.splice(idx, 1)
+    }
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '操作失败')
   } finally {
@@ -676,7 +730,12 @@ async function confirmRejectApp() {
   }
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+})
+
+// 轮询：列表页每 10 秒自动刷新
+usePolling(loadData, 10000).start()
 </script>
 
 <style scoped>
