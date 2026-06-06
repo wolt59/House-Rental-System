@@ -124,9 +124,9 @@ async function loadData() {
       params.status = activeTab.value
     }
     const res = await getBookings(params)
-    bookings.value = Array.isArray(res) ? res : []
+    bookings.value = res.items || []
     await resolveItems(bookings.value, ['tenant_id'])
-    total.value = Array.isArray(res) ? res.length : 0
+    total.value = res.total || 0
   } catch (e) {
     ElMessage.error('加载预约列表失败')
   } finally {

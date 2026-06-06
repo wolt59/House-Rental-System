@@ -3,7 +3,7 @@
     <div class="page-header"><h2>房源管理</h2></div>
     <el-form :inline="true" :model="filters" style="margin-bottom: 16px">
       <el-form-item label="审核状态">
-        <el-select v-model="filters.review_status" clearable placeholder="全部" @change="loadData">
+        <el-select v-model="filters.review_status" clearable placeholder="全部" style="width: 130px" @change="loadData">
           <el-option label="草稿" value="draft" />
           <el-option label="待审核" value="pending" />
           <el-option label="审核中" value="reviewing" />
@@ -12,7 +12,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="房源状态">
-        <el-select v-model="filters.status" clearable placeholder="全部" @change="loadData">
+        <el-select v-model="filters.status" clearable placeholder="全部" style="width: 130px" @change="loadData">
           <el-option label="已发布" value="published" />
           <el-option label="未发布" value="unpublished" />
           <el-option label="已出租" value="rented" />
@@ -123,9 +123,9 @@ async function loadData() {
     if (filters.status) params.status = filters.status
     if (filters.keyword) params.keyword = filters.keyword
     const res = await getProperties(params)
-    properties.value = Array.isArray(res) ? res : []
+    properties.value = res.items || []
     if (properties.value.length) await resolveItems(properties.value, ['owner_id'])
-    total.value = Array.isArray(res) ? res.length : 0
+    total.value = res.total || 0
   } catch (e) { ElMessage.error('加载房源列表失败') } finally {
     loading.value = false
   }

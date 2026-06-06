@@ -41,7 +41,7 @@
 
     <div class="section">
       <div class="section-header">
-        <h2>新闻</h2>
+        <h2>新闻资讯</h2>
         <el-button text type="primary" @click="$router.push('/news')">查看全部 →</el-button>
       </div>
       <el-row :gutter="20">
@@ -88,8 +88,8 @@ onMounted(async () => {
       getProperties({ skip: 0, limit: 6 }),
       getNewsList({ skip: 0, limit: 3 }),
     ])
-    properties.value = Array.isArray(pRes) ? pRes : []
-    newsList.value = nRes?.items || []
+    properties.value = (pRes && pRes.items) || []
+    newsList.value = (nRes && nRes.items) || []
   } catch (e) {
     ElMessage.error('加载首页数据失败')
   } finally {

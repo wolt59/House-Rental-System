@@ -117,9 +117,9 @@ async function loadData() {
   try {
     // 房东查看自己房源的维修申请
     const res = await getMaintenances({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
-    list.value = Array.isArray(res) ? res : []
+    list.value = res.items || []
     await resolveItems(list.value, ['tenant_id', 'property_id'])
-    total.value = Array.isArray(res) ? res.length : 0
+    total.value = res.total || 0
   } catch (e) {
     ElMessage.error('加载失败')
   } finally {

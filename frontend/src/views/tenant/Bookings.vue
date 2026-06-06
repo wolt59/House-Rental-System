@@ -154,7 +154,7 @@ async function loadData() {
     // 未来日程：后端筛选已同意状态，前端再按时间过滤
     if (activeTab.value === 'upcoming') {
       const res = await getBookings({ status: 'approved', skip: 0, limit: 100, sort_by: sortBy.value, sort_order: sortOrder.value })
-      const allBookings = Array.isArray(res) ? res : []
+      const allBookings = (res && res.items) || []
       const now = new Date()
       bookings.value = allBookings.filter(b => new Date(b.appointment_time) > now)
       total.value = bookings.value.length
@@ -164,7 +164,7 @@ async function loadData() {
     // 已结束：显示已完成的预约
     if (activeTab.value === 'ended') {
       const res = await getBookings({ ...params, status: 'completed' })
-      bookings.value = Array.isArray(res) ? res : []
+      bookings.value = (res && res.items) || []
       total.value = bookings.value.length
       await loadApplicationStatus()
       return
@@ -179,8 +179,8 @@ async function loadData() {
       params.skip = 0
     }
     const res = await getBookings(params)
-    bookings.value = Array.isArray(res) ? res : []
-    total.value = Array.isArray(res) ? res.length : 0
+    bookings.value = res.items || []
+    total.value = res.total || 0
     await loadApplicationStatus()
   } catch (e) {
     ElMessage.error('加载预约列表失败')

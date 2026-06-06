@@ -25,6 +25,7 @@ from app.schemas.property import (
     PropertyStatusUpdate,
     PropertyUpdate,
 )
+from app.schemas.common import PaginatedResponse
 from app.core.enums import PropertyReviewStatus, PropertyStatus
 
 router = APIRouter()
@@ -33,7 +34,7 @@ router = APIRouter()
 CORE_PROPERTY_FIELDS = {"address", "floor_plan", "area", "rent", "deposit", "floor_number", "total_floors"}
 
 
-@router.get("/", response_model=List[Property])
+@router.get("/")
 def list_properties(
     skip: int = 0,
     limit: int = 20,
@@ -82,8 +83,12 @@ def list_properties(
             db, skip=skip, limit=limit, region=region, floor_plan=floor_plan,
             review_status=filter_review_status, status=filter_status, keyword=keyword,
         )
-        # 将 ORM 模型转为 Pydantic dict，确保关系数据（如 images）可序列化
-        return [Property.model_validate(p).model_dump(mode='json') for p in properties]
+        total = crud_property.count_properties(
+            db, region=region, floor_plan=floor_plan,
+            review_status=filter_review_status, status=filter_status, keyword=keyword,
+        )
+        items = [Property.model_validate(p).model_dump(mode='json') for p in properties]
+        return {"items": items, "total": total}
 
     return cache_manager.get_or_set(
         cache_key,

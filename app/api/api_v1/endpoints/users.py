@@ -7,11 +7,12 @@ from app.core.security import get_password_hash
 from app.crud import crud_user, crud_property, crud_audit
 from app.models.user import User as UserModel
 from app.schemas.user import User, UserUpdate, LandlordPropertyStats, PasswordChange
+from app.schemas.common import PaginatedResponse
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[User])
+@router.get("/")
 def list_users(
     skip: int = 0,
     limit: int = 20,
@@ -25,7 +26,9 @@ def list_users(
         query = query.filter(UserModel.role == role)
     if is_active is not None:
         query = query.filter(UserModel.is_active == is_active)
-    return query.offset(skip).limit(limit).all()
+    total = query.count()
+    items = query.offset(skip).limit(limit).all()
+    return {"items": items, "total": total}
 
 
 @router.get("/me", response_model=User)

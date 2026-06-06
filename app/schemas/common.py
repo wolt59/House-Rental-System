@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, List
 
 from pydantic import BaseModel, model_serializer
 
@@ -14,3 +14,9 @@ class UTCDatetimeModel(BaseModel):
             else:
                 result[field_name] = field_value
         return result
+
+
+class PaginatedResponse(BaseModel):
+    """统一分页响应模型"""
+    items: List[Any]
+    total: int

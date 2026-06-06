@@ -5,22 +5,22 @@
     <div v-loading="!dashboard" element-loading-text="加载中..." style="min-height: 300px">
     <!-- 核心指标 -->
     <div class="stat-cards" v-if="dashboard">
-      <div class="stat-card primary">
+      <div class="stat-card primary" style="cursor: pointer" @click="$router.push('/landlord/properties')">
         <div class="stat-icon">🏠</div>
         <div class="stat-value">{{ dashboard.properties?.total || 0 }}</div>
         <div class="stat-label">房源总数</div>
       </div>
-      <div class="stat-card success">
+      <div class="stat-card success" style="cursor: pointer" @click="$router.push('/landlord/properties')">
         <div class="stat-icon">✅</div>
         <div class="stat-value">{{ dashboard.properties?.rented || 0 }}</div>
         <div class="stat-label">已出租</div>
       </div>
-      <div class="stat-card warning">
+      <div class="stat-card warning" style="cursor: pointer" @click="$router.push('/landlord/properties')">
         <div class="stat-icon">📊</div>
         <div class="stat-value">{{ dashboard.properties?.occupancy_rate || 0 }}%</div>
         <div class="stat-label">出租率</div>
       </div>
-      <div class="stat-card danger">
+      <div class="stat-card danger" style="cursor: pointer" @click="$router.push('/landlord/payments')">
         <div class="stat-icon">💰</div>
         <div class="stat-value">¥{{ formatMoney(dashboard.income?.total || 0) }}</div>
         <div class="stat-label">总收入</div>
@@ -53,8 +53,7 @@
           <template #header><span>待处理事项</span></template>
           <el-row :gutter="20">
             <el-col :span="6">
-              <div class="todo-item-large">
-                <div class="todo-icon">📅</div>
+              <div class="todo-item-large" style="cursor: pointer" @click="$router.push('/landlord/bookings')">
                 <div class="todo-info">
                   <div class="todo-label">待确认预约</div>
                   <div class="todo-value">{{ dashboard?.bookings?.pending || 0 }}</div>
@@ -62,7 +61,7 @@
               </div>
             </el-col>
             <el-col :span="6">
-              <div class="todo-item-large">
+              <div class="todo-item-large" style="cursor: pointer" @click="$router.push('/landlord/maintenance')">
                 <div class="todo-icon">🔧</div>
                 <div class="todo-info">
                   <div class="todo-label">待处理维修</div>
@@ -71,7 +70,7 @@
               </div>
             </el-col>
             <el-col :span="6">
-              <div class="todo-item-large">
+              <div class="todo-item-large" style="cursor: pointer" @click="$router.push('/landlord/complaints')">
                 <div class="todo-icon">⚠️</div>
                 <div class="todo-info">
                   <div class="todo-label">待处理投诉</div>
@@ -80,7 +79,7 @@
               </div>
             </el-col>
             <el-col :span="6">
-              <div class="todo-item-large">
+              <div class="todo-item-large" style="cursor: pointer" @click="$router.push('/landlord/contracts')">
                 <div class="todo-icon">📋</div>
                 <div class="todo-info">
                   <div class="todo-label">活跃合同</div>

@@ -94,8 +94,8 @@ router.beforeEach((to, from, next) => {
     return next('/')
   }
   if (!to.meta.guest && !token && to.path !== '/login') {
-    const publicPaths = ['/', '/properties', '/news', '/search']
-    if (publicPaths.some((p) => to.path.startsWith(p))) {
+    const publicPaths = ['/properties', '/news', '/search']
+    if (to.path === '/' || publicPaths.some((p) => to.path.startsWith(p))) {
       return next()
     }
     return next('/login')
