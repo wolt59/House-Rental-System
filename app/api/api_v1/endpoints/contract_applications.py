@@ -55,7 +55,7 @@ def _notify_user(
                     "property_id": notification.property_id,
                     "link": notification.link,
                     "is_read": notification.is_read,
-                    "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                    "created_at": notification.created_at.isoformat() + 'Z' if notification.created_at else None,
                 },
                 "unread_count": unread_before + 1,
             }

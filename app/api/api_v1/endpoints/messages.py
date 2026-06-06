@@ -50,7 +50,7 @@ def send_message(
                 "property_id": message.property_id,
                 "link": message.link,
                 "is_read": message.is_read,
-                "created_at": message.created_at.isoformat() if message.created_at else None,
+                "created_at": message.created_at.isoformat() + 'Z' if message.created_at else None,
             },
             "unread_count": unread_before + 1,
         }

@@ -10,37 +10,37 @@
     <!-- 状态提示 -->
     <el-alert v-if="isEdit && currentEditProperty" :title="getEditRestrictionTip(currentEditProperty)" type="warning" :closable="false" style="margin-bottom: 16px" />
 
-    <el-form :model="form" label-width="140px" class="property-form">
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="140px" class="property-form">
       <!-- 位置信息 -->
       <div class="form-section">
         <h3 class="section-title">位置信息</h3>
         <el-row :gutter="16">
           <el-col :span="8">
-            <el-form-item label="所属城市" required>
+            <el-form-item label="所属城市" prop="city">
               <el-input v-model="form.city" placeholder="如：北京" :disabled="isFieldDisabled('city')" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="行政区/区县" required>
+            <el-form-item label="行政区/区县" prop="region">
               <el-input v-model="form.region" placeholder="如：朝阳区" :disabled="isFieldDisabled('region')" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="小区名称" required>
+            <el-form-item label="小区名称" prop="community_name">
               <el-input v-model="form.community_name" placeholder="如：阳光花园" :disabled="isFieldDisabled('community_name')" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="24">
-            <el-form-item label="详细门牌号" required>
+            <el-form-item label="详细门牌号" prop="address">
               <el-input v-model="form.address" placeholder="如：建国路88号5号楼3单元1201室" :disabled="isFieldDisabled('address')" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="24">
-            <el-form-item label="房源标题" required>
+            <el-form-item label="房源标题" prop="title">
               <el-input v-model="form.title" placeholder="如：阳光花园精装两居室" :disabled="isFieldDisabled('title')" />
             </el-form-item>
           </el-col>
@@ -52,7 +52,7 @@
         <h3 class="section-title">房屋详情</h3>
         <el-row :gutter="16">
           <el-col :span="8">
-            <el-form-item label="房源类型" required>
+            <el-form-item label="房源类型" prop="rental_type">
               <el-select v-model="form.rental_type" placeholder="请选择" style="width: 100%" :disabled="isFieldDisabled('rental_type')">
                 <el-option label="整租" value="整租" />
                 <el-option label="合租" value="合租" />
@@ -62,7 +62,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="户型" required class="floor-plan-form-item">
+            <el-form-item label="户型" prop="floor_plan" class="floor-plan-form-item">
               <div class="floor-plan-editor">
                 <el-select v-model="form.bedrooms" placeholder="室" :disabled="isFieldDisabled('floor_plan')" @change="updateFloorPlan" style="flex:1;min-width:60px">
                   <el-option v-for="n in 6" :key="n" :label="n + '室'" :value="n" />
@@ -128,12 +128,12 @@
         <h3 class="section-title">租赁条件</h3>
         <el-row :gutter="16">
           <el-col :span="8">
-            <el-form-item label="每月租金(元)" required>
+            <el-form-item label="每月租金(元)" prop="rent">
               <el-input-number v-model="form.rent" :min="0" :precision="2" style="width: 100%" :disabled="isFieldDisabled('rent')" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="押金金额(元)">
+            <el-form-item label="押金金额(元)" prop="deposit">
               <el-input-number v-model="form.deposit" :min="0" :precision="2" style="width: 100%" :disabled="isFieldDisabled('deposit')" />
             </el-form-item>
           </el-col>
@@ -294,13 +294,51 @@ const isEdit = !!propertyId
 
 const submitting = ref(false)
 const currentEditProperty = ref(null)
+const formRef = ref(null)
+
+// 表单验证规则
+const rules = {
+  title: [
+    { required: true, message: '请输入房源标题', trigger: 'blur' },
+    { min: 3, message: '房源标题至少需要3个字符', trigger: 'blur' },
+  ],
+  region: [
+    { required: true, message: '请输入行政区/区县', trigger: 'blur' },
+  ],
+  address: [
+    { required: true, message: '请输入详细地址', trigger: 'blur' },
+    { min: 3, message: '详细地址至少需要3个字符', trigger: 'blur' },
+  ],
+  rental_type: [
+    { required: true, message: '请选择房源类型', trigger: 'change' },
+  ],
+  floor_plan: [
+    {
+      validator: (_rule, value, callback) => {
+        if (!value && form.bedrooms == null && form.livingrooms == null && form.bathrooms == null) {
+          callback(new Error('请选择户型（室/厅/卫）'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change',
+    },
+  ],
+  rent: [
+    { required: true, message: '请输入月租金', trigger: 'blur' },
+    { type: 'number', min: 0, message: '月租金不能为负数', trigger: 'blur' },
+  ],
+  deposit: [
+    { type: 'number', min: 0, message: '押金不能为负数', trigger: 'blur' },
+  ],
+}
 
 const defaultForm = { 
   title: '', address: '', region: '', city: '', community_name: '',
   rental_type: '', property_type: '', floor_plan: '',
   bedrooms: null, livingrooms: null, bathrooms: null,
   building_area: null,
-  rent: null, deposit: null, payment_method: '',
+  rent: null, deposit: 0, payment_method: '',
   decoration: '', orientation: '', floor_number: '', total_floors: null,
   min_lease_term: null, earliest_move_in_date: '',
   property_fee_bearer: '', utility_fee_bearer: '', other_fee_bearer: '',
@@ -338,6 +376,7 @@ function updateFloorPlan() {
   if (form.livingrooms != null) parts.push(form.livingrooms + '厅')
   if (form.bathrooms != null) parts.push(form.bathrooms + '卫')
   form.floor_plan = parts.join('')
+  formRef.value?.validateField('floor_plan')
 }
 
 // 加载房源数据（编辑模式）
@@ -415,10 +454,12 @@ function getEditRestrictionTip(property) {
 async function handleSubmit() {
   submitting.value = true
   try {
-    if (!form.title?.trim() || !form.address?.trim() || !form.region?.trim() || form.rent === null || form.rent === '' || !form.rental_type || !form.floor_plan) {
-      ElMessage.warning('请填写：房源标题、行政区/区县、地址、房源类型、户型、月租金')
-      return
-    }
+    await formRef.value.validate()
+  } catch {
+    submitting.value = false
+    return
+  }
+  try {
 
     const data = {}
     Object.entries(form).forEach(([k, v]) => {

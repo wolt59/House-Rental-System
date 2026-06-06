@@ -402,7 +402,7 @@ def remind_payment(
                 "property_id": msg.property_id,
                 "link": msg.link,
                 "is_read": msg.is_read,
-                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+                "created_at": msg.created_at.isoformat() + 'Z' if msg.created_at else None,
             },
             "unread_count": unread_before + 1,
         }

@@ -303,6 +303,8 @@ def update_property(
                 db.add(notification)
                 admin_unread[admin.id] = crud_message.get_unread_count(db, user_id=admin.id)
 
+            db.commit()
+
             async def notify_admins():
                 for admin in admins:
                     payload = {
@@ -399,6 +401,7 @@ def review_property(
     db.add(notification)
     db.flush()
     db.refresh(notification)
+    db.commit()
 
     unread_before = crud_message.get_unread_count(db, user_id=updated.owner_id)
 
@@ -414,7 +417,7 @@ def review_property(
                 "property_id": notification.property_id,
                 "link": "/landlord/properties",
                 "is_read": notification.is_read,
-                "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                "created_at": notification.created_at.isoformat() + 'Z' if notification.created_at else None,
             },
             "unread_count": unread_before + 1,
         }
@@ -525,6 +528,8 @@ def submit_for_review(property_id: int, background_tasks: BackgroundTasks, reque
             db.add(notification)
             admin_unread[admin.id] = crud_message.get_unread_count(db, user_id=admin.id)
 
+        db.commit()
+
         async def notify_admins():
             for admin in admins:
                 payload = {
@@ -588,6 +593,8 @@ def withdraw_review(property_id: int, background_tasks: BackgroundTasks, request
             )
             db.add(notification)
             admin_unread[admin.id] = crud_message.get_unread_count(db, user_id=admin.id)
+
+        db.commit()
 
         async def notify_admins():
             for admin in admins:
@@ -668,6 +675,7 @@ def unpublish_property(
             link="/landlord/properties",
         )
         db.add(notification)
+        db.commit()
 
         unread_before = crud_message.get_unread_count(db, user_id=updated.owner_id)
 

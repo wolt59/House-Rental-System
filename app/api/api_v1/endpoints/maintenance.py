@@ -55,6 +55,7 @@ def create_maintenance(
     db.add(notification)
     db.flush()
     db.refresh(notification)
+    db.commit()
 
     unread_before = crud_message.get_unread_count(db, user_id=property_obj.owner_id, message_type="notification")
 
@@ -70,7 +71,7 @@ def create_maintenance(
                 "property_id": notification.property_id,
                 "link": notification.link,
                 "is_read": notification.is_read,
-                "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                "created_at": notification.created_at.isoformat() + 'Z' if notification.created_at else None,
             },
             "unread_count": unread_before + 1,
         }
@@ -166,6 +167,7 @@ def update_maintenance(
         db.add(notification)
         db.flush()
         db.refresh(notification)
+        db.commit()
 
         unread_before = crud_message.get_unread_count(db, user_id=updated.tenant_id, message_type="notification")
 
@@ -181,7 +183,7 @@ def update_maintenance(
                     "property_id": notification.property_id,
                     "link": notification.link,
                     "is_read": notification.is_read,
-                    "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                    "created_at": notification.created_at.isoformat() + 'Z' if notification.created_at else None,
                 },
                 "unread_count": unread_before + 1,
             }

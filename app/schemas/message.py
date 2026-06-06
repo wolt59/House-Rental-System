@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_serializer, field_validator
 
 from app.schemas.common import UTCDatetimeModel
 
@@ -62,6 +62,14 @@ class ConversationSummary(BaseModel):
     last_message_type: str
     unread_count: int
     property_id: Optional[int] = None
+
+    @field_serializer('last_message_time', when_used='json')
+    def serialize_datetime(self, value: datetime) -> str:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc).isoformat().replace('+00:00', 'Z')
+        if value is not None:
+            return value.isoformat()
+        return None
 
 
 class ConversationListResponse(BaseModel):
