@@ -37,6 +37,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = N
     user = crud_user.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
 
     ip_address = request.client.host if request and request.client else None
     user.last_login_at = datetime.utcnow()

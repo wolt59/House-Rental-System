@@ -23,6 +23,9 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response) => response.data,
   (error) => {
+    if (error.config?.url?.includes('/api/v1/auth/login')) {
+      return Promise.reject(error)
+    }
     if (error.response?.status === 401) {
       if (error.config?.url?.includes('/api/v1/auth/login')) {
         // login endpoint returns 401 for wrong credentials — let the caller handle it
