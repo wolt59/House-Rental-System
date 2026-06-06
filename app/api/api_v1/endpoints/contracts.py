@@ -324,12 +324,6 @@ def sign_contract_landlord(
         if property_obj:
             property_obj.status = PropertyStatus.RENTED
 
-        # 自动生成押金和租金账单
-        try:
-            crud_payment.generate_bills_for_contract(db, contract)
-        except Exception as e:
-            print(f"生成账单失败: {e}")
-
         # 通知租客合同已生效
         _send_message_to_user(
             db=db,
@@ -352,9 +346,6 @@ def sign_contract_landlord(
             background_tasks=background_tasks,
         )
 
-    db.commit()
-    db.refresh(contract)
-
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
@@ -364,6 +355,17 @@ def sign_contract_landlord(
         detail="Contract signed by landlord",
         ip_address=None,
     )
+    db.commit()
+    db.refresh(contract)
+
+    # 合同生效后独立生成账单（失败不影响合同签署）
+    if contract.signed_by_tenant and contract.signed_by_landlord:
+        try:
+            crud_payment.generate_bills_for_contract(db, contract)
+        except Exception as e:
+            db.rollback()
+            print(f"生成账单失败（不影响合同生效）: {e}")
+
     return contract
 
 
@@ -421,12 +423,6 @@ def sign_contract_tenant(
         if property_obj:
             property_obj.status = PropertyStatus.RENTED
 
-        # 自动生成押金和租金账单
-        try:
-            crud_payment.generate_bills_for_contract(db, contract)
-        except Exception as e:
-            print(f"生成账单失败: {e}")
-
         # 通知房东合同已生效
         _send_message_to_user(
             db=db,
@@ -449,9 +445,6 @@ def sign_contract_tenant(
             background_tasks=background_tasks,
         )
 
-    db.commit()
-    db.refresh(contract)
-
     crud_audit.create_audit_log(
         db,
         user_id=current_user.id,
@@ -461,6 +454,17 @@ def sign_contract_tenant(
         detail="Contract signed by tenant",
         ip_address=None,
     )
+    db.commit()
+    db.refresh(contract)
+
+    # 合同生效后独立生成账单（失败不影响合同签署）
+    if contract.signed_by_tenant and contract.signed_by_landlord:
+        try:
+            crud_payment.generate_bills_for_contract(db, contract)
+        except Exception as e:
+            db.rollback()
+            print(f"生成账单失败（不影响合同生效）: {e}")
+
     return contract
 
 

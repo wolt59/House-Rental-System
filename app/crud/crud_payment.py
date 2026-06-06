@@ -9,12 +9,15 @@ from app.schemas.payment import PaymentCreate, PaymentSubmit, PaymentUpdate
 from app.core.enums import PaymentStatus, BillType, ContractStatus
 
 
+import uuid
+
+
 def _generate_bill_no() -> str:
-    return f"BILL{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+    return f"BILL{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
 
 def _generate_payment_no() -> str:
-    return f"PAY{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+    return f"PAY{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
 
 def get_payment(db: Session, payment_id: int) -> Optional[Payment]:

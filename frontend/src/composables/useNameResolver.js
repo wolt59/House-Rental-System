@@ -42,7 +42,7 @@ export function useNameResolver() {
   }
 
   async function resolveItems(items, fields) {
-    const userFields = new Set(['tenant_id', 'user_id', 'from_user_id', 'to_user_id', 'handled_by', 'owner_id'])
+    const userFields = new Set(['tenant_id', 'landlord_id', 'user_id', 'from_user_id', 'to_user_id', 'handled_by', 'owner_id'])
     const propertyFields = new Set(['property_id'])
 
     const userKeys = new Set()

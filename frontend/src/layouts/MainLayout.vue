@@ -51,6 +51,18 @@
               <el-menu-item index="/admin/news">
                 <el-icon><Document /></el-icon><span>新闻审核</span>
               </el-menu-item>
+              <el-menu-item index="/admin/contracts">
+                <el-icon><DocumentChecked /></el-icon><span>合同总览</span>
+              </el-menu-item>
+              <el-menu-item index="/admin/bookings">
+                <el-icon><Calendar /></el-icon><span>预约总览</span>
+              </el-menu-item>
+              <el-menu-item index="/admin/maintenance">
+                <el-icon><Tools /></el-icon><span>维修总览</span>
+              </el-menu-item>
+              <el-menu-item index="/admin/complaints">
+                <el-icon><WarningFilled /></el-icon><span>投诉总览</span>
+              </el-menu-item>
               <el-menu-item index="/admin/payments">
                 <el-icon><Money /></el-icon><span>账单管理</span>
               </el-menu-item>
