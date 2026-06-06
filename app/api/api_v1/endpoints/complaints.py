@@ -1,14 +1,17 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_landlord, get_current_active_user, get_current_active_admin, get_db
 from app.schemas.common import PaginatedResponse
-from app.crud import crud_audit, crud_complaint
+from app.crud import crud_audit, crud_complaint, crud_message
 from app.models.complaint import Complaint
+from app.models.message import Message as MessageModel
 from app.models.property import Property
+from app.models.user import User
 from app.schemas.complaint import Complaint as ComplaintSchema, ComplaintCreate, ComplaintUpdate
 from app.core.enums import ComplaintStatus
+from app.api.websocket import ws_manager
 
 router = APIRouter()
 
@@ -26,11 +29,53 @@ def _authorize_complaint(complaint: Complaint, current_user):
 
 
 @router.post("/", response_model=ComplaintSchema, status_code=status.HTTP_201_CREATED)
-def create_complaint(complaint_in: ComplaintCreate, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+def create_complaint(
+    complaint_in: ComplaintCreate,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
     property_obj = db.query(Property).filter(Property.id == complaint_in.property_id).first()
     if not property_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
     complaint = crud_complaint.create_complaint(db, tenant_id=current_user.id, complaint_in=complaint_in)
+
+    # 通知房东
+    notification = MessageModel(
+        from_user_id=current_user.id,
+        to_user_id=property_obj.owner_id,
+        property_id=complaint.property_id,
+        content=f"租客「{current_user.full_name or current_user.username}」对房源「{property_obj.title}」提交了投诉，请登录系统查看并处理。",
+        message_type="notification",
+        link="/landlord/complaints",
+    )
+    db.add(notification)
+    db.flush()
+    db.refresh(notification)
+
+    unread_before = crud_message.get_unread_count(db, user_id=property_obj.owner_id, message_type="notification")
+
+    async def notify_landlord():
+        payload = {
+            "type": "new_message",
+            "message": {
+                "id": notification.id,
+                "from_user_id": notification.from_user_id,
+                "to_user_id": notification.to_user_id,
+                "content": notification.content,
+                "message_type": notification.message_type,
+                "property_id": notification.property_id,
+                "link": notification.link,
+                "is_read": notification.is_read,
+                "created_at": notification.created_at.isoformat() if notification.created_at else None,
+            },
+            "unread_count": unread_before + 1,
+        }
+        await ws_manager.send_personal(payload, property_obj.owner_id)
+
+    background_tasks.add_task(notify_landlord)
+
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,
@@ -74,7 +119,14 @@ def read_complaint(complaint_id: int, db: Session = Depends(get_db), current_use
 
 
 @router.put("/{complaint_id}", response_model=ComplaintSchema)
-def update_complaint(complaint_id: int, complaint_in: ComplaintUpdate, request: Request, db: Session = Depends(get_db), current_user=Depends(get_current_active_user)):
+def update_complaint(
+    complaint_id: int,
+    complaint_in: ComplaintUpdate,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
     complaint = crud_complaint.get_complaint(db, complaint_id)
     if not complaint:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Complaint not found")
@@ -92,6 +144,49 @@ def update_complaint(complaint_id: int, complaint_in: ComplaintUpdate, request: 
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid complaint status")
 
     updated = crud_complaint.update_complaint(db, complaint, complaint_in)
+
+    # 非租客操作时，通知租客状态变更
+    if current_user.role != "tenant" and updated.status != complaint.status:
+        status_cn = {
+            "open": "待处理",
+            "in_progress": "处理中",
+            "resolved": "已解决",
+            "closed": "已关闭",
+        }.get(updated.status, updated.status)
+        notification = MessageModel(
+            from_user_id=current_user.id,
+            to_user_id=updated.tenant_id,
+            property_id=updated.property_id,
+            content=f"您的投诉状态已更新为「{status_cn}」。",
+            message_type="notification",
+            link="/tenant/complaints",
+        )
+        db.add(notification)
+        db.flush()
+        db.refresh(notification)
+
+        unread_before = crud_message.get_unread_count(db, user_id=updated.tenant_id, message_type="notification")
+
+        async def notify_tenant():
+            payload = {
+                "type": "new_message",
+                "message": {
+                    "id": notification.id,
+                    "from_user_id": notification.from_user_id,
+                    "to_user_id": notification.to_user_id,
+                    "content": notification.content,
+                    "message_type": notification.message_type,
+                    "property_id": notification.property_id,
+                    "link": notification.link,
+                    "is_read": notification.is_read,
+                    "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                },
+                "unread_count": unread_before + 1,
+            }
+            await ws_manager.send_personal(payload, updated.tenant_id)
+
+        background_tasks.add_task(notify_tenant)
+
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(
         db,

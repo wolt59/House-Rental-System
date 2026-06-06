@@ -251,6 +251,7 @@ def submit_payment(
         property_id=payment.property_id,
         is_read=False,
         message_type="notification",
+        link="/landlord/payments",
     )
     db.add(msg)
     db.commit()
@@ -292,6 +293,7 @@ def confirm_payment(
         property_id=payment.property_id,
         is_read=False,
         message_type="notification",
+        link="/tenant/payments",
     )
     db.add(msg)
     db.commit()
@@ -334,6 +336,7 @@ def reject_payment(
         property_id=payment.property_id,
         is_read=False,
         message_type="notification",
+        link="/tenant/payments",
     )
     db.add(msg)
     db.commit()
@@ -379,6 +382,7 @@ def remind_payment(
         property_id=payment.property_id,
         content=content,
         message_type=MessageType.NOTIFICATION.value,
+        link="/tenant/payments",
     )
     db.add(msg)
     db.flush()
@@ -396,6 +400,7 @@ def remind_payment(
                 "content": msg.content,
                 "message_type": msg.message_type,
                 "property_id": msg.property_id,
+                "link": msg.link,
                 "is_read": msg.is_read,
                 "created_at": msg.created_at.isoformat() if msg.created_at else None,
             },

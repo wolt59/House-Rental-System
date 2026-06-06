@@ -115,11 +115,23 @@ def list_all_news_admin(
 
 @router.get("/{news_id}", response_model=NewsSchema)
 def read_news(news_id: int, db: Session = Depends(get_db)):
+    cache_key = CacheKey.news(news_id)
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        # 浏览量增量（不阻断请求，也不影响缓存命中）
+        news = crud_news.get_news(db, news_id)
+        if news:
+            crud_news.increment_view_count(db, news)
+        return cached
+
     news = crud_news.get_news(db, news_id)
     if not news:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="News not found")
     crud_news.increment_view_count(db, news)
-    return _news_to_schema(news)
+    result = _news_to_schema(news)
+    if news.status == "published":
+        cache_manager.set(cache_key, result, ttl=settings.CACHE_DEFAULT_TTL)
+    return result
 
 
 @router.put("/{news_id}", response_model=NewsSchema)

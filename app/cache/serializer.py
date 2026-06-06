@@ -26,35 +26,29 @@ class CacheEncoder(json.JSONEncoder):
             return obj.isoformat()
         if isinstance(obj, Decimal):
             return float(obj)
-        # SQLAlchemy 模型：仅序列化列属性，不触发关系加载
-        if hasattr(obj, "__table__"):
-            return self._sa_model_to_dict(obj)
         if hasattr(obj, "__dict__"):
-            result = {}
-            for key, value in obj.__dict__.items():
-                if key.startswith("_") or callable(value):
-                    continue
-                if isinstance(value, (datetime, date)):
-                    result[key] = value.isoformat()
-                elif isinstance(value, Decimal):
-                    result[key] = float(value)
-                elif isinstance(value, (str, int, float, bool, type(None), list, dict)):
-                    result[key] = value
-            return result
+            # SQLAlchemy 模型尝试转为 dict
+            return self._model_to_dict(obj)
         return super().default(obj)
 
     @staticmethod
-    def _sa_model_to_dict(obj: Any) -> dict:
-        """将 SQLAlchemy 模型转为字典（仅列属性，不含关系）"""
+    def _model_to_dict(obj: Any) -> dict:
+        """将 SQLAlchemy 模型转为字典"""
         result = {}
-        for column in obj.__table__.columns:
-            value = getattr(obj, column.name)
+        for key in dir(obj):
+            if key.startswith("_"):
+                continue
+            value = getattr(obj, key, None)
+            if callable(value):
+                continue
             if isinstance(value, (datetime, date)):
-                result[column.name] = value.isoformat()
+                result[key] = value.isoformat()
             elif isinstance(value, Decimal):
-                result[column.name] = float(value)
-            else:
-                result[column.name] = value
+                result[key] = float(value)
+            elif isinstance(value, (str, int, float, bool, type(None))):
+                result[key] = value
+            elif isinstance(value, (list, dict)):
+                result[key] = value
         return result
 
 

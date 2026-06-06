@@ -16,7 +16,7 @@
           <el-input v-model="form.username" prefix-icon="User" placeholder="请输入用户名" />
         </el-form-item>
         <el-form-item prop="password">
-          <el-input v-model="form.password" prefix-icon="Lock" type="password" placeholder="请输入密码" show-password @keyup.enter="handleLogin" />
+          <el-input v-model="form.password" prefix-icon="Lock" type="password" placeholder="请输入密码" show-password autocomplete="new-password" @keyup.enter="handleLogin" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="loading" class="login-btn" @click="handleLogin">登 录</el-button>
@@ -57,7 +57,8 @@ async function handleLogin() {
     else if (role === 'landlord') router.push('/landlord/properties')
     else router.push('/')
   } catch (e) {
-    // handled by interceptor
+    const msg = e?.response?.data?.detail || e?.message || '登录失败，请检查用户名和密码'
+    ElMessage.error(msg)
   } finally {
     loading.value = false
   }

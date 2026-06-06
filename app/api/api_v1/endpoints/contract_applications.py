@@ -24,6 +24,7 @@ def _notify_user(
     to_user_id: int,
     content: str,
     property_id: Optional[int] = None,
+    link: Optional[str] = None,
     background_tasks: Optional[BackgroundTasks] = None,
 ):
     notification = MessageModel(
@@ -31,6 +32,7 @@ def _notify_user(
         to_user_id=to_user_id,
         content=content,
         property_id=property_id,
+        link=link,
         is_read=False,
         message_type=MessageType.NOTIFICATION.value,
     )
@@ -51,6 +53,7 @@ def _notify_user(
                     "content": notification.content,
                     "message_type": notification.message_type,
                     "property_id": notification.property_id,
+                    "link": notification.link,
                     "is_read": notification.is_read,
                     "created_at": notification.created_at.isoformat() if notification.created_at else None,
                 },
@@ -96,6 +99,7 @@ def create_application(
             to_user_id=property_obj.owner_id,
             content=f"租客「{current_user.full_name or current_user.username}」申请租赁您的房源「{property_obj.title}」，请登录系统查看并处理。",
             property_id=application.property_id,
+            link="/landlord/contracts",
             background_tasks=background_tasks,
         )
 
@@ -218,6 +222,7 @@ def approve_application(
         to_user_id=application.tenant_id,
         content=f"您的合约申请已被房东同意，已生成合同草稿（编号：{application.contract.contract_no if application.contract else ''}），请登录系统查看。",
         property_id=application.property_id,
+        link="/tenant/contracts",
         background_tasks=background_tasks,
     )
 
@@ -272,6 +277,7 @@ def reject_application(
         to_user_id=application.tenant_id,
         content=f"您的合约申请已被房东拒绝。原因：{reason}",
         property_id=application.property_id,
+        link="/tenant/contracts",
         background_tasks=background_tasks,
     )
 
@@ -326,6 +332,7 @@ def cancel_application(
             to_user_id=property_obj.owner_id,
             content=f"租客「{current_user.full_name or current_user.username}」已取消对房源「{property_obj.title}」的合约申请。",
             property_id=application.property_id,
+            link="/landlord/contracts",
             background_tasks=background_tasks,
         )
 

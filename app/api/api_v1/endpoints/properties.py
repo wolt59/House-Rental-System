@@ -298,6 +298,7 @@ def update_property(
                     property_id=updated.id,
                     content=notification_content,
                     message_type="notification",
+                    link="/admin/properties",
                 )
                 db.add(notification)
                 admin_unread[admin.id] = crud_message.get_unread_count(db, user_id=admin.id)
@@ -393,6 +394,7 @@ def review_property(
         property_id=updated.id,
         content=notification_content,
         message_type="notification",
+        link="/landlord/properties",
     )
     db.add(notification)
     db.flush()
@@ -410,6 +412,7 @@ def review_property(
                 "content": notification.content,
                 "message_type": notification.message_type,
                 "property_id": notification.property_id,
+                "link": "/landlord/properties",
                 "is_read": notification.is_read,
                 "created_at": notification.created_at.isoformat() if notification.created_at else None,
             },
@@ -517,6 +520,7 @@ def submit_for_review(property_id: int, background_tasks: BackgroundTasks, reque
                 property_id=updated.id,
                 content=notification_content,
                 message_type="notification",
+                link="/admin/properties",
             )
             db.add(notification)
             admin_unread[admin.id] = crud_message.get_unread_count(db, user_id=admin.id)
@@ -531,6 +535,7 @@ def submit_for_review(property_id: int, background_tasks: BackgroundTasks, reque
                         "content": notification_content,
                         "message_type": "notification",
                         "property_id": updated.id,
+                        "link": "/admin/properties",
                         "is_read": False,
                     },
                     "unread_count": admin_unread.get(admin.id, 0) + 1,
@@ -579,6 +584,7 @@ def withdraw_review(property_id: int, background_tasks: BackgroundTasks, request
                 property_id=updated.id,
                 content=notification_content,
                 message_type="notification",
+                link="/admin/properties",
             )
             db.add(notification)
             admin_unread[admin.id] = crud_message.get_unread_count(db, user_id=admin.id)
@@ -593,6 +599,7 @@ def withdraw_review(property_id: int, background_tasks: BackgroundTasks, request
                         "content": notification_content,
                         "message_type": "notification",
                         "property_id": updated.id,
+                        "link": "/admin/properties",
                         "is_read": False,
                     },
                     "unread_count": admin_unread.get(admin.id, 0) + 1,
@@ -658,6 +665,7 @@ def unpublish_property(
             property_id=updated.id,
             content=content,
             message_type="notification",
+            link="/landlord/properties",
         )
         db.add(notification)
 
@@ -672,6 +680,7 @@ def unpublish_property(
                     "content": content,
                     "message_type": "notification",
                     "property_id": updated.id,
+                    "link": "/landlord/properties",
                     "is_read": False,
                 },
                 "unread_count": unread_before + 1,

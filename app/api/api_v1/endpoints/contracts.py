@@ -38,6 +38,7 @@ def _send_message_to_user(
     content: str,
     property_id: Optional[int] = None,
     message_type: str = MessageType.NOTIFICATION.value,
+    link: Optional[str] = None,
     background_tasks: Optional[BackgroundTasks] = None,
 ) -> None:
     """发送系统消息给用户（含 WebSocket 实时推送）"""
@@ -48,6 +49,7 @@ def _send_message_to_user(
         property_id=property_id,
         is_read=False,
         message_type=message_type,
+        link=link,
     )
     db.add(message)
     db.flush()
@@ -66,6 +68,7 @@ def _send_message_to_user(
                     "content": message.content,
                     "message_type": message.message_type,
                     "property_id": message.property_id,
+                    "link": message.link,
                     "is_read": message.is_read,
                     "created_at": message.created_at.isoformat() if message.created_at else None,
                 },
@@ -109,6 +112,7 @@ def create_contract(
         to_user_id=contract_in.tenant_id,
         content=f"房东为您创建了新的租赁合同（编号：{contract.contract_no}），请登录系统查看并签署。",
         property_id=contract_in.property_id,
+        link="/tenant/contracts",
         background_tasks=background_tasks,
     )
     db.commit()
@@ -177,6 +181,7 @@ def auto_create_contract(
         to_user_id=property_obj.owner_id,
         content=f"租客申请签约您的房源（{property_obj.title}），请登录系统查看并处理。",
         property_id=contract_in.property_id,
+        link="/landlord/contracts",
         background_tasks=background_tasks,
     )
     db.commit()
@@ -337,6 +342,7 @@ def sign_contract_landlord(
             to_user_id=contract.tenant_id,
             content=f"租赁合同（编号：{contract.contract_no}）已由房东签署，合同正式生效。",
             property_id=contract.property_id,
+            link="/tenant/contracts",
             background_tasks=background_tasks,
         )
     else:
@@ -350,6 +356,7 @@ def sign_contract_landlord(
             to_user_id=contract.tenant_id,
             content=f"房东已签署租赁合同（编号：{contract.contract_no}），请您登录系统完成签署。",
             property_id=contract.property_id,
+            link="/tenant/contracts",
             background_tasks=background_tasks,
         )
 
@@ -437,6 +444,7 @@ def sign_contract_tenant(
         to_user_id=contract.landlord_id,
         content=f"租赁合同（编号：{contract.contract_no}）已由租客签署，合同正式生效。",
         property_id=contract.property_id,
+        link="/landlord/contracts",
         background_tasks=background_tasks,
     )
 
@@ -493,6 +501,7 @@ def withdraw_signature_landlord(
         to_user_id=contract.tenant_id,
         content=f"房东已撤回对租赁合同（编号：{contract.contract_no}）的签署。",
         property_id=contract.property_id,
+        link="/tenant/contracts",
         background_tasks=background_tasks,
     )
 
@@ -539,6 +548,7 @@ def withdraw_signature_tenant(
         to_user_id=contract.landlord_id,
         content=f"租客已撤回对租赁合同（编号：{contract.contract_no}）的签署。",
         property_id=contract.property_id,
+        link="/landlord/contracts",
         background_tasks=background_tasks,
     )
 
@@ -590,12 +600,14 @@ def cancel_contract(
     else:
         notify_user_id = contract.landlord_id
 
+    cancel_link = "/tenant/contracts" if notify_user_id == contract.tenant_id else "/landlord/contracts"
     _send_message_to_user(
         db=db,
         from_user_id=current_user.id,
         to_user_id=notify_user_id,
         content=f"租赁合同（编号：{contract.contract_no}）已被取消。",
         property_id=contract.property_id,
+        link=cancel_link,
         background_tasks=background_tasks,
     )
     db.commit()
@@ -649,12 +661,14 @@ def reject_contract(
     else:
         notify_user_id = contract.landlord_id
 
+    reject_link = "/tenant/contracts" if notify_user_id == contract.tenant_id else "/landlord/contracts"
     _send_message_to_user(
         db=db,
         from_user_id=current_user.id,
         to_user_id=notify_user_id,
         content=f"租赁合同（编号：{contract.contract_no}）已被拒绝。原因：{reject_data.reason or '未说明'}",
         property_id=contract.property_id,
+        link=reject_link,
         background_tasks=background_tasks,
     )
     db.commit()
@@ -711,12 +725,14 @@ def terminate_contract(
     else:
         notify_user_id = contract.landlord_id
 
+    terminate_link = "/tenant/contracts" if notify_user_id == contract.tenant_id else "/landlord/contracts"
     _send_message_to_user(
         db=db,
         from_user_id=current_user.id,
         to_user_id=notify_user_id,
         content=f"租赁合同（编号：{contract.contract_no}）已终止。原因：{terminate_data.reason or '未说明'}",
         property_id=contract.property_id,
+        link=terminate_link,
         background_tasks=background_tasks,
     )
     db.commit()

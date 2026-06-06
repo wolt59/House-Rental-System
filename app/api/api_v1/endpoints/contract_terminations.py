@@ -22,6 +22,7 @@ def _notify_user(
     to_user_id: int,
     content: str,
     property_id: Optional[int] = None,
+    link: Optional[str] = None,
     background_tasks: Optional[BackgroundTasks] = None,
 ):
     notification = MessageModel(
@@ -29,6 +30,7 @@ def _notify_user(
         to_user_id=to_user_id,
         content=content,
         property_id=property_id,
+        link=link,
         is_read=False,
         message_type=MessageType.NOTIFICATION.value,
     )
@@ -49,6 +51,7 @@ def _notify_user(
                     "content": notification.content,
                     "message_type": notification.message_type,
                     "property_id": notification.property_id,
+                    "link": notification.link,
                     "is_read": notification.is_read,
                     "created_at": notification.created_at.isoformat() if notification.created_at else None,
                 },
@@ -82,12 +85,14 @@ def create_termination_request(
 
     contract = termination_request.contract
     notify_user_id = contract.landlord_id if current_user.id == contract.tenant_id else contract.tenant_id
+    term_link = "/tenant/contracts" if notify_user_id == contract.tenant_id else "/landlord/contracts"
     _notify_user(
         db=db,
         from_user_id=current_user.id,
         to_user_id=notify_user_id,
         content=f"合同（编号：{contract.contract_no}）的提前解约申请已发起，解约原因：{termination_request.termination_reason}，请登录系统查看并处理。",
         property_id=contract.property_id,
+        link=term_link,
         background_tasks=background_tasks,
     )
 
@@ -203,12 +208,14 @@ def approve_termination_request(
             detail=str(e)
         )
 
+    approve_link = "/tenant/contracts" if termination_request.initiator_id == contract.tenant_id else "/landlord/contracts"
     _notify_user(
         db=db,
         from_user_id=current_user.id,
         to_user_id=termination_request.initiator_id,
         content=f"合同（编号：{contract.contract_no}）的提前解约申请已被同意。",
         property_id=contract.property_id,
+        link=approve_link,
         background_tasks=background_tasks,
     )
 
@@ -257,12 +264,14 @@ def reject_termination_request(
             detail=str(e)
         )
 
+    reject_link = "/tenant/contracts" if termination_request.initiator_id == contract.tenant_id else "/landlord/contracts"
     _notify_user(
         db=db,
         from_user_id=current_user.id,
         to_user_id=termination_request.initiator_id,
         content=f"合同（编号：{contract.contract_no}）的提前解约申请已被拒绝。原因：{reason}",
         property_id=contract.property_id,
+        link=reject_link,
         background_tasks=background_tasks,
     )
 
