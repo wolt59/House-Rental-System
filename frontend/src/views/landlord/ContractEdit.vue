@@ -218,6 +218,18 @@ async function handleSaveDraft() {
 
     const updateData = {}
 
+    // 日期字段（editableFields 中以 YYYY-MM-DD 字符串存储，需转为 ISO）
+    if (currentFields.start_date) {
+      updateData.start_date = new Date(currentFields.start_date).toISOString()
+    } else if (c.start_date) {
+      updateData.start_date = c.start_date
+    }
+    if (currentFields.end_date) {
+      updateData.end_date = new Date(currentFields.end_date).toISOString()
+    } else if (c.end_date) {
+      updateData.end_date = c.end_date
+    }
+
     // 基础租金字段
     if (currentFields.monthly_rent != null && currentFields.monthly_rent > 0) {
       updateData.monthly_rent = currentFields.monthly_rent
@@ -315,6 +327,8 @@ function getCurrentFields() {
   const currentFields = docEl?.editableFields ? { ...docEl.editableFields } : {}
 
   return {
+    start_date: currentFields.start_date || c?.start_date || '',
+    end_date: currentFields.end_date || c?.end_date || '',
     monthly_rent: currentFields.monthly_rent ?? c?.monthly_rent ?? 0,
     deposit: currentFields.deposit ?? c?.deposit ?? 0,
     payment_method: currentFields.payment_method || c?.payment_method || '',
@@ -333,6 +347,9 @@ function validateBeforeSign() {
   const f = getCurrentFields()
   const errors = []
 
+  if (!f.start_date) errors.push('租赁开始日期未填写')
+  if (!f.end_date) errors.push('租赁结束日期未填写')
+  if (f.start_date && f.end_date && new Date(f.end_date) <= new Date(f.start_date)) errors.push('结束日期必须晚于开始日期')
   if (!f.monthly_rent || f.monthly_rent <= 0) errors.push('月租金（¥）不能为空')
   if (f.payment_method.trim() === '') errors.push('付款方式未选择')
   if (!f.payment_day || f.payment_day < 1) errors.push('租金支付日期未填写')
@@ -346,7 +363,7 @@ function validateBeforeSign() {
 }
 
 // 进入签署模式
-function startSigning() {
+async function startSigning() {
   if (!contract.value) return
   const s = contract.value.status
   // 只有草稿状态可以发起签署
@@ -367,6 +384,34 @@ function startSigning() {
       '请完善合同信息',
       { dangerouslyUseHTMLString: true, confirmButtonText: '去修改', type: 'warning' }
     )
+    return
+  }
+
+  // 签署前先保存所有当前可编辑字段，确保默认值也被持久化到数据库
+  try {
+    const f = getCurrentFields()
+    const updateData = {
+      start_date: f.start_date ? new Date(f.start_date).toISOString() : undefined,
+      end_date: f.end_date ? new Date(f.end_date).toISOString() : undefined,
+      monthly_rent: f.monthly_rent,
+      deposit: f.deposit,
+      payment_method: f.payment_method,
+      payment_day: f.payment_day,
+      early_termination_days: f.early_termination_days,
+      renewal_notice_days: f.renewal_notice_days,
+      property_fee_bearer: f.property_fee_bearer,
+      utility_fee_bearer: f.utility_fee_bearer,
+      other_fee_bearer: f.other_fee_bearer,
+      allow_pets: f.allow_pets,
+    }
+    await updateContract(contract.value.id, updateData)
+    // 同步本地数据
+    Object.keys(updateData).forEach(key => {
+      contract.value[key] = updateData[key]
+    })
+  } catch (e) {
+    console.error('签署前保存失败:', e)
+    ElMessage.error(e.response?.data?.detail || '保存合同信息失败，请重试')
     return
   }
 

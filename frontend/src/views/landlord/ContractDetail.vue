@@ -82,10 +82,9 @@ const landlordInfo = ref(null)
 const tenantInfo = ref(null)
 const loading = ref(false)
 
-// 是否可以导出PDF（只有签署后的合同才能导出）
+// 是否可以导出PDF（所有状态的合同均可导出）
 const canExportPDF = computed(() => {
-  if (!contract.value) return false
-  return ['active', 'part_signed', 'terminated', 'expired'].includes(contract.value.status)
+  return !!contract.value
 })
 
 

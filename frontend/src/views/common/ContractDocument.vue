@@ -35,7 +35,33 @@
     <div class="contract-section">
       <h2 class="section-title">第三条 租赁期限</h2>
       <div class="section-content">
-        <p>租赁期共 <strong>{{ leaseMonths }} 个月</strong>，自 <strong>{{ formatDate(contract.start_date) }}</strong> 起至 <strong>{{ formatDate(contract.end_date) }}</strong> 止。</p>
+        <p>租赁期共 <strong>{{ leaseMonths }} 个月</strong>，自
+          <strong class="editable-field date-field" v-if="canEdit && isEditable('start_date')">
+            <el-date-picker
+              v-model="editableFields.start_date"
+              type="date"
+              format="YYYY年MM月DD日"
+              value-format="YYYY-MM-DD"
+              placeholder="选择日期"
+              :disabled-date="disabledStartDate"
+              @change="onStartDateChange"
+            />
+          </strong>
+          <span v-else>{{ formatDate(contract.start_date) }}</span>
+          起至
+          <strong class="editable-field date-field" v-if="canEdit && isEditable('end_date')">
+            <el-date-picker
+              v-model="editableFields.end_date"
+              type="date"
+              format="YYYY年MM月DD日"
+              value-format="YYYY-MM-DD"
+              placeholder="选择日期"
+              :disabled-date="disabledEndDate"
+              @change="handleFieldChange('end_date', $event)"
+            />
+          </strong>
+          <span v-else>{{ formatDate(contract.end_date) }}</span>
+          止。</p>
         <p>租赁期满，甲方有权收回该房屋，乙方应如期交还。乙方如要求续租，则必须在租赁期满前 <strong class="editable-field" v-if="canEdit && isEditable('renewal_notice_days')">
           <el-input-number 
             v-model="editableFields.renewal_notice_days" 
@@ -44,7 +70,7 @@
             controls-position="right"
             @change="handleFieldChange('renewal_notice_days', $event)"
           />
-        </strong><span v-else>{{ contract.renewal_notice_days || 30 }} 日内</span>书面通知甲方，经甲方同意后，重新签订租赁合同。</p>
+        </strong><span v-else>{{ contract.renewal_notice_days || 30 }}</span>日内书面通知甲方，经甲方同意后，重新签订租赁合同。</p>
       </div>
     </div>
 
@@ -90,7 +116,7 @@
             controls-position="right"
             @change="handleFieldChange('payment_day', $event)"
           />
-        </strong><span v-else>{{ contract.payment_day || '__' }} 日</span>前支付下一期租金。</p>
+        </strong><span v-else>{{ contract.payment_day || '__' }}</span>日前支付下一期租金。</p>
       </div>
     </div>
 
@@ -265,6 +291,8 @@ const documentRef = ref(null)
 
 // 可编辑字段列表
 const editableFieldsList = [
+  'start_date',
+  'end_date',
   'monthly_rent',
   'deposit',
   'payment_method',
@@ -278,8 +306,30 @@ const editableFieldsList = [
   'allow_pets'
 ]
 
+// 将日期字符串格式化为日期选择器适用的 YYYY-MM-DD
+function formatDateForPicker(val) {
+  if (!val) return ''
+  return dayjs(val).format('YYYY-MM-DD')
+}
+
+// 开始日期约束：不早于30天前，不晚于2年后
+function disabledStartDate(date) {
+  const today = dayjs()
+  return date.isBefore(today.subtract(30, 'day')) || date.isAfter(today.add(2, 'year'))
+}
+
+// 结束日期约束：必须晚于开始日期，且不晚于开始日期后10年
+function disabledEndDate(date) {
+  const startVal = editableFields.value.start_date
+  if (!startVal) return false
+  const start = dayjs(startVal)
+  return date.isBefore(start.add(1, 'day')) || date.isAfter(start.add(10, 'year'))
+}
+
 // 可编辑字段的本地副本
 const editableFields = ref({
+  start_date: '',
+  end_date: '',
   monthly_rent: 0,
   deposit: 0,
   payment_method: '',
@@ -297,6 +347,8 @@ const editableFields = ref({
 watch(() => props.contract, (newVal) => {
   if (newVal) {
     editableFields.value = {
+      start_date: formatDateForPicker(newVal.start_date),
+      end_date: formatDateForPicker(newVal.end_date),
       monthly_rent: newVal.monthly_rent || 0,
       deposit: newVal.deposit || 0,
       payment_method: newVal.payment_method || '',
@@ -312,11 +364,17 @@ watch(() => props.contract, (newVal) => {
   }
 }, { deep: true, immediate: true })
 
-// 计算租期月数
+// 计算租期月数（编辑模式下优先使用编辑中的日期）
 const leaseMonths = computed(() => {
-  if (!props.contract.start_date || !props.contract.end_date) return 0
-  const start = dayjs(props.contract.start_date)
-  const end = dayjs(props.contract.end_date)
+  let start, end
+  if (props.canEdit && isEditable('start_date') && editableFields.value.start_date && editableFields.value.end_date) {
+    start = dayjs(editableFields.value.start_date)
+    end = dayjs(editableFields.value.end_date)
+  } else {
+    if (!props.contract.start_date || !props.contract.end_date) return 0
+    start = dayjs(props.contract.start_date)
+    end = dayjs(props.contract.end_date)
+  }
   return end.diff(start, 'month')
 })
 
@@ -326,6 +384,19 @@ function isEditable(fieldName) {
     return editableFieldsList.includes(fieldName)
   }
   return false
+}
+
+// 处理开始日期变更：保存并校验结束日期是否仍然有效
+function onStartDateChange(val) {
+  handleFieldChange('start_date', val)
+  // 如果结束日期已经无效（早于或等于新的开始日期），则清除
+  if (val && editableFields.value.end_date) {
+    const end = dayjs(editableFields.value.end_date)
+    const start = dayjs(val)
+    if (!end.isAfter(start)) {
+      editableFields.value.end_date = ''
+    }
+  }
 }
 
 // 处理字段变更
@@ -665,5 +736,20 @@ defineExpose({
 
 .editable-field :deep(.el-select) {
   width: 120px;
+}
+
+/* 日期选择器样式 */
+.date-field {
+  min-width: 180px;
+}
+
+.date-field :deep(.el-date-editor) {
+  width: 180px;
+}
+
+.date-field :deep(.el-input__inner) {
+  padding: 2px 8px;
+  font-size: 14px;
+  text-align: center;
 }
 </style>

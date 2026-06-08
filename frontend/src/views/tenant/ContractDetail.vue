@@ -92,10 +92,9 @@ const canSign = computed(() => {
          contract.value.status === 'pending_sign'
 })
 
-// 是否可以导出PDF（签署后或待签署状态的合同可导出）
+// 是否可以导出PDF（所有状态的合同均可导出）
 const canExportPDF = computed(() => {
-  if (!contract.value) return false
-  return ['active', 'pending_sign', 'part_signed', 'terminated', 'expired'].includes(contract.value.status)
+  return !!contract.value
 })
 
 // 加载合同数据
