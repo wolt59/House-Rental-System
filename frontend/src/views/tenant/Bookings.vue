@@ -13,14 +13,12 @@
       </div>
     </div>
     
-    <el-tabs v-model="activeTab" @tab-change="loadData">
-      <el-tab-pane label="全部" name="all" />
-      <el-tab-pane label="待确认" name="pending" />
-      <el-tab-pane label="待协商" name="negotiating" />
-      <el-tab-pane label="已结束" name="ended" />
-      <el-tab-pane label="已拒绝" name="rejected" />
-      <el-tab-pane label="已取消" name="cancelled" />
-      <el-tab-pane label="未来日程" name="upcoming" />
+    <el-tabs v-model="activeTab" @tab-change="onTabChange">
+      <el-tab-pane v-for="tab in BOOKING_TABS" :key="tab.name" :name="tab.name">
+        <template #label>
+          <span>{{ tab.label }} ({{ tabCounts[tab.name] ?? 0 }})</span>
+        </template>
+      </el-tab-pane>
     </el-tabs>
 
     <el-table :data="bookings" stripe v-loading="loading" style="width: 100%">
@@ -50,7 +48,7 @@
       </el-table-column>
     </el-table>
     <el-empty v-if="!loading && bookings.length === 0" description="暂无数据" />
-    <div class="pagination-wrap" v-if="total >= pageSize && activeTab !== 'all'">
+    <div class="pagination-wrap" v-if="total >= pageSize">
       <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
     </div>
 
@@ -74,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getBookings, updateBooking, completeBooking, respondReschedule } from '../../api/booking'
 import { autoCreateContract } from '../../api/contract'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -93,6 +91,16 @@ const sortOrder = ref('asc')
 const detailVisible = ref(false)
 const currentItem = ref(null)
 const bookingWithApplications = ref(new Set()) // 存储已有申请的booking_id
+
+const BOOKING_TABS = [
+  { name: 'all', label: '全部' },
+  { name: 'pending', label: '待确认' },
+  { name: 'negotiating', label: '待协商' },
+  { name: 'ended', label: '已结束' },
+  { name: 'rejected', label: '已拒绝' },
+  { name: 'cancelled', label: '已取消' },
+  { name: 'upcoming', label: '未来日程' },
+]
 
 const statusMap = { 
   pending: '待确认', 
@@ -141,6 +149,24 @@ async function loadApplicationStatus() {
   }
 }
 
+const tabCounts = computed(() => {
+  const counts = {}
+  BOOKING_TABS.forEach(t => { counts[t.name] = 0 })
+  const all = bookings.value || []
+  counts.all = all.length
+  for (const b of all) {
+    if (counts[b.status] !== undefined) counts[b.status]++
+    if (b.status === 'completed') counts.ended++
+    if (b.status === 'approved' && new Date(b.appointment_time) > new Date()) counts.upcoming++
+  }
+  return counts
+})
+
+function onTabChange() {
+  currentPage.value = 1
+  loadData()
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -173,10 +199,6 @@ async function loadData() {
     // 其他标签页按原逻辑处理
     if (activeTab.value !== 'all') {
       params.status = activeTab.value
-    } else {
-      // "全部"展示所有记录，不做分页
-      params.limit = 9999
-      params.skip = 0
     }
     const res = await getBookings(params)
     bookings.value = res.items || []

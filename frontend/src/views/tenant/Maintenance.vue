@@ -4,6 +4,14 @@
       <h2>维修申请</h2>
       <el-button type="primary" @click="showDialog = true">提交维修申请</el-button>
     </div>
+    <el-tabs v-model="statusFilter" @tab-change="onFilterChange" style="margin-bottom: 12px">
+      <el-tab-pane label="全部" name="" />
+      <el-tab-pane label="待处理" name="new" />
+      <el-tab-pane label="处理中" name="in_progress" />
+      <el-tab-pane label="已解决" name="resolved" />
+      <el-tab-pane label="已关闭" name="closed" />
+    </el-tabs>
+
     <el-table :data="list" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="title" label="标题" width="200" />
@@ -88,6 +96,7 @@ const detailVisible = ref(false)
 const submitting = ref(false)
 const currentItem = ref(null)
 const myProperties = ref([])
+const statusFilter = ref('')
 const form = reactive({ property_id: '', title: '', description: '', priority: 'normal' })
 
 const priorityMap = { low: '低', normal: '普通', high: '高', urgent: '紧急' }
@@ -99,10 +108,17 @@ function priorityType(p) { return priorityTypeMap[p] || 'info' }
 function statusLabel(s) { return statusMap[s] || s }
 function statusType(s) { return statusTypeMap[s] || 'info' }
 
+function onFilterChange() {
+  currentPage.value = 1
+  loadData()
+}
+
 async function loadData() {
   loading.value = true
   try {
-    const res = await getMaintenances({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
+    const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
+    if (statusFilter.value) params.status = statusFilter.value
+    const res = await getMaintenances(params)
     list.value = res.items || []
     total.value = res.total || 0
   } catch (e) {

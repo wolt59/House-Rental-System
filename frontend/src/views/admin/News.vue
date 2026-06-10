@@ -56,6 +56,10 @@
       </el-table-column>
     </el-table>
 
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" />
+    </div>
+
     <el-empty v-if="!loading && displayNews.length === 0" :description="emptyDesc" />
 
     <el-dialog v-model="rejectVisible" title="下架新闻" width="480px" :close-on-click-modal="false">
@@ -91,6 +95,9 @@ const NEWS_TABS = [
 const newsList = ref([])
 const loading = ref(false)
 const activeTab = ref('')
+const pageSize = ref(10)
+const currentPage = ref(1)
+const total = ref(0)
 const reviewLoading = ref(false)
 const rejectVisible = ref(false)
 const rejectTarget = ref(null)
@@ -106,9 +113,15 @@ const tabCounts = computed(() => {
   return counts
 })
 
-const displayNews = computed(() => {
+const filteredNews = computed(() => {
   if (!activeTab.value) return newsList.value
   return newsList.value.filter(n => n.status === activeTab.value)
+})
+const displayNews = computed(() => {
+  const list = filteredNews.value
+  total.value = list.length
+  const start = (currentPage.value - 1) * pageSize.value
+  return list.slice(start, start + pageSize.value)
 })
 
 const emptyDesc = computed(() => {
@@ -127,7 +140,9 @@ function formatDate(d) {
   return new Date(d).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
 }
 
-function onTabChange() {}
+function onTabChange() {
+  currentPage.value = 1
+}
 
 async function loadData() {
   loading.value = true
@@ -198,4 +213,5 @@ onMounted(loadData)
 .news-title { color: var(--primary); cursor: pointer; }
 .news-title:hover { text-decoration: underline; }
 .reject-icon { color: var(--danger); margin-left: 4px; cursor: help; font-size: 14px; vertical-align: middle; }
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
 </style>

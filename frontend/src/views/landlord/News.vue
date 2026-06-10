@@ -49,6 +49,10 @@
       </el-table-column>
     </el-table>
 
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="onPageChange" />
+    </div>
+
     <el-empty v-if="!loading && displayNews.length === 0" :description="emptyDesc" />
 
     <el-dialog
@@ -101,6 +105,9 @@ const NEWS_TABS = [
 const newsList = ref([])
 const loading = ref(false)
 const activeTab = ref('')
+const pageSize = ref(10)
+const currentPage = ref(1)
+const total = ref(0)
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const editingId = ref(null)
@@ -124,9 +131,15 @@ const tabCounts = computed(() => {
   return counts
 })
 
-const displayNews = computed(() => {
+const filteredNews = computed(() => {
   if (!activeTab.value) return newsList.value
   return newsList.value.filter(n => n.status === activeTab.value)
+})
+const displayNews = computed(() => {
+  const list = filteredNews.value
+  total.value = list.length
+  const start = (currentPage.value - 1) * pageSize.value
+  return list.slice(start, start + pageSize.value)
 })
 
 const emptyDesc = computed(() => {
@@ -145,7 +158,10 @@ function formatDate(d) {
   return new Date(d).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
 }
 
-function onTabChange() { /* displayNews is reactive */ }
+function onTabChange() {
+  currentPage.value = 1
+}
+function onPageChange() {}
 
 async function loadData() {
   loading.value = true
@@ -221,4 +237,5 @@ onMounted(loadData)
 .news-title:hover { text-decoration: underline; }
 .reject-icon { color: var(--danger); margin-left: 4px; cursor: help; font-size: 14px; vertical-align: middle; }
 .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; }
+.pagination-wrap { display: flex; justify-content: center; margin-top: 20px; }
 </style>

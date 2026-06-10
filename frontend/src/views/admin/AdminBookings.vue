@@ -4,13 +4,12 @@
       <h2>预约管理</h2>
     </div>
 
-    <el-tabs v-model="activeTab" @tab-change="loadData">
-      <el-tab-pane label="全部" name="all" />
-      <el-tab-pane label="待处理" name="pending" />
-      <el-tab-pane label="已通过" name="approved" />
-      <el-tab-pane label="已完成" name="completed" />
-      <el-tab-pane label="已拒绝" name="rejected" />
-      <el-tab-pane label="协商中" name="negotiating" />
+    <el-tabs v-model="activeTab" @tab-change="onTabChange">
+      <el-tab-pane v-for="tab in BOOKING_TABS" :key="tab.name" :name="tab.name">
+        <template #label>
+          <span>{{ tab.label }} ({{ tabCounts[tab.name] ?? 0 }})</span>
+        </template>
+      </el-tab-pane>
     </el-tabs>
 
     <el-table :data="bookings" stripe v-loading="loading" style="width: 100%">
@@ -75,7 +74,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getBookings } from '../../api/booking'
 import { ElMessage } from 'element-plus'
 import { useNameResolver } from '../../composables/useNameResolver'
@@ -88,6 +87,26 @@ const currentPage = ref(1)
 const activeTab = ref('all')
 const detailVisible = ref(false)
 const currentItem = ref(null)
+
+const BOOKING_TABS = [
+  { name: 'all', label: '全部' },
+  { name: 'pending', label: '待处理' },
+  { name: 'approved', label: '已通过' },
+  { name: 'completed', label: '已完成' },
+  { name: 'rejected', label: '已拒绝' },
+  { name: 'negotiating', label: '协商中' },
+]
+
+const tabCounts = computed(() => {
+  const counts = {}
+  BOOKING_TABS.forEach(t => { counts[t.name] = 0 })
+  const all = bookings.value || []
+  counts.all = all.length
+  for (const b of all) {
+    if (counts[b.status] !== undefined) counts[b.status]++
+  }
+  return counts
+})
 
 const { resolveItems, userNames, propertyNames } = useNameResolver()
 
@@ -132,6 +151,11 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+function onTabChange() {
+  currentPage.value = 1
+  loadData()
 }
 
 function viewDetail(row) {

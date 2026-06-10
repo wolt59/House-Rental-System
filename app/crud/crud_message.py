@@ -44,6 +44,27 @@ def get_messages_sent(
     )
 
 
+def count_messages_received(
+    db: Session,
+    to_user_id: int,
+    is_read: Optional[bool] = None,
+    message_types: Optional[List[str]] = None,
+) -> int:
+    query = db.query(Message).filter(Message.to_user_id == to_user_id)
+    if is_read is not None:
+        query = query.filter(Message.is_read == is_read)
+    if message_types:
+        query = query.filter(Message.message_type.in_(message_types))
+    return query.count()
+
+
+def count_messages_sent(
+    db: Session,
+    from_user_id: int,
+) -> int:
+    return db.query(Message).filter(Message.from_user_id == from_user_id).count()
+
+
 def create_message(db: Session, from_user_id: int, message_in: MessageCreate) -> Message:
     message = Message(
         from_user_id=from_user_id,

@@ -54,7 +54,8 @@ def list_audit_logs(
         created_from=created_from,
         created_to=created_to,
     )
-    return {"items": items, "total": total}
+    serialized_items = [AuditLog.model_validate(l).model_dump(mode='json') for l in items]
+    return {"items": serialized_items, "total": total}
 
 
 @router.get("/{audit_id}", response_model=AuditLog)

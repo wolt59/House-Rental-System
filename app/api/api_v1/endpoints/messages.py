@@ -14,6 +14,7 @@ from app.schemas.message import (
     UnreadCountResponse,
     UserSearchResult,
 )
+from app.schemas.common import PaginatedResponse
 
 router = APIRouter()
 
@@ -60,7 +61,7 @@ def send_message(
     return message
 
 
-@router.get("/received", response_model=List[MessageSchema])
+@router.get("/received", response_model=PaginatedResponse)
 def list_received_messages(
     unread: Optional[bool] = None,
     skip: int = 0,
@@ -71,19 +72,27 @@ def list_received_messages(
 ):
     is_read = None if unread is None else not unread
     message_types = [t.strip() for t in type.split(",") if t.strip()] if type else None
-    return crud_message.get_messages_received(
+    messages = crud_message.get_messages_received(
         db, to_user_id=current_user.id, is_read=is_read, skip=skip, limit=limit, message_types=message_types,
     )
+    total = crud_message.count_messages_received(
+        db, to_user_id=current_user.id, is_read=is_read, message_types=message_types,
+    )
+    items = [MessageSchema.model_validate(m).model_dump(mode='json') for m in messages]
+    return {"items": items, "total": total}
 
 
-@router.get("/sent", response_model=List[MessageSchema])
+@router.get("/sent", response_model=PaginatedResponse)
 def list_sent_messages(
     skip: int = 0,
     limit: int = 20,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    return crud_message.get_messages_sent(db, from_user_id=current_user.id, skip=skip, limit=limit)
+    messages = crud_message.get_messages_sent(db, from_user_id=current_user.id, skip=skip, limit=limit)
+    total = crud_message.count_messages_sent(db, from_user_id=current_user.id)
+    items = [MessageSchema.model_validate(m).model_dump(mode='json') for m in messages]
+    return {"items": items, "total": total}
 
 
 @router.put("/{message_id}/read", response_model=MessageSchema)

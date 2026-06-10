@@ -97,12 +97,12 @@ async function loadData() {
       getReceivedMessages({ skip: (currentPageReceived.value - 1) * pageSize.value, limit: pageSize.value }),
       getSentMessages({ skip: (currentPageSent.value - 1) * pageSize.value, limit: pageSize.value }),
     ])
-    receivedMessages.value = Array.isArray(rRes) ? rRes : []
-    sentMessages.value = Array.isArray(sRes) ? sRes : []
+    receivedMessages.value = (rRes && rRes.items) || []
+    sentMessages.value = (sRes && sRes.items) || []
     if (receivedMessages.value.length) await resolveItems(receivedMessages.value, ['from_user_id'])
     if (sentMessages.value.length) await resolveItems(sentMessages.value, ['to_user_id'])
-    totalReceived.value = Array.isArray(rRes) ? rRes.length : 0
-    totalSent.value = Array.isArray(sRes) ? sRes.length : 0
+    totalReceived.value = (rRes && rRes.total) || 0
+    totalSent.value = (sRes && sRes.total) || 0
   } catch (e) {
     ElMessage.error('加载消息列表失败')
   } finally {

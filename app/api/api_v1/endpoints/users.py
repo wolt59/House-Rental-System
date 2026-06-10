@@ -28,7 +28,8 @@ def list_users(
         query = query.filter(UserModel.is_active == is_active)
     total = query.count()
     items = query.offset(skip).limit(limit).all()
-    return {"items": items, "total": total}
+    serialized_items = [User.model_validate(u).model_dump(mode='json') for u in items]
+    return {"items": serialized_items, "total": total}
 
 
 @router.get("/me", response_model=User)

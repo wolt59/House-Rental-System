@@ -22,9 +22,9 @@
       </el-button>
     </div>
     <div class="notif-body" v-loading="loading">
-      <div class="notification-list" v-if="filteredNotifications.length > 0">
+      <div class="notification-list" v-if="displayNotifications.length > 0">
         <div
-          v-for="msg in filteredNotifications"
+          v-for="msg in displayNotifications"
           :key="msg.id"
           :class="['notification-item', { unread: !msg.is_read }]"
           @click="markAsRead(msg)"
@@ -50,7 +50,10 @@
           </div>
         </div>
       </div>
-      <el-empty v-if="!loading && filteredNotifications.length === 0" description="暂无通知" />
+      <el-empty v-if="!loading && displayNotifications.length === 0" description="暂无通知" />
+    </div>
+    <div class="pagination-wrap" v-if="totalNotifs > pageSize">
+      <el-pagination background layout="prev, pager, next" :total="totalNotifs" :page-size="pageSize" v-model:current-page="currentPage" @current-change="onPageChange" />
     </div>
   </div>
 </template>
@@ -74,6 +77,9 @@ const notifications = ref([])
 const loading = ref(false)
 const searchKeyword = ref('')
 const filterType = ref('')
+const pageSize = ref(15)
+const currentPage = ref(1)
+const totalNotifs = ref(0)
 
 let ws = null
 let wsReconnectTimer = null
@@ -95,6 +101,13 @@ const filteredNotifications = computed(() => {
   }
 
   return result
+})
+
+const displayNotifications = computed(() => {
+  const list = filteredNotifications.value
+  totalNotifs.value = list.length
+  const start = (currentPage.value - 1) * pageSize.value
+  return list.slice(start, start + pageSize.value)
 })
 
 function formatTime(d) {
@@ -125,7 +138,7 @@ async function loadNotifications() {
       limit: 500,
       type: 'system,notification',
     })
-    notifications.value = Array.isArray(res) ? res : []
+    notifications.value = (res && res.items) || []
   } catch (e) {
     ElMessage.error('加载通知失败')
   } finally {
@@ -169,10 +182,14 @@ function handleAction(msg) {
 }
 
 function handleSearch() {
+  currentPage.value = 1
 }
 
 function handleFilterChange() {
+  currentPage.value = 1
 }
+
+function onPageChange() {}
 
 function connectWebSocket() {
   const token = sessionStorage.getItem('token')
@@ -330,6 +347,12 @@ onBeforeUnmount(() => {
   visibility: hidden;
   transition: opacity 0.2s, visibility 0.2s;
   flex-shrink: 0;
+}
+
+.pagination-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0;
 }
 
 

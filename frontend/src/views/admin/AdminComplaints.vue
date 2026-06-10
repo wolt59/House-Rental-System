@@ -5,12 +5,12 @@
       <el-button type="primary" @click="loadData">刷新</el-button>
     </div>
 
-    <el-tabs v-model="statusFilter" @tab-change="loadData" style="margin-bottom: 8px">
-      <el-tab-pane label="全部" name="" />
-      <el-tab-pane label="待处理" name="open" />
-      <el-tab-pane label="处理中" name="in_progress" />
-      <el-tab-pane label="已解决" name="resolved" />
-      <el-tab-pane label="已关闭" name="closed" />
+    <el-tabs v-model="statusFilter" @tab-change="onTabChange" style="margin-bottom: 8px">
+      <el-tab-pane v-for="tab in STATUS_TABS" :key="tab.name" :name="tab.name">
+        <template #label>
+          <span>{{ tab.label }} ({{ tabCounts[tab.name] ?? 0 }})</span>
+        </template>
+      </el-tab-pane>
     </el-tabs>
 
     <el-table :data="list" stripe v-loading="loading" style="width: 100%">
@@ -94,10 +94,18 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { getComplaints, updateComplaint } from '../../api/complaint'
 import { ElMessage } from 'element-plus'
 import { useNameResolver } from '../../composables/useNameResolver'
+
+const STATUS_TABS = [
+  { name: '', label: '全部' },
+  { name: 'open', label: '待处理' },
+  { name: 'in_progress', label: '处理中' },
+  { name: 'resolved', label: '已解决' },
+  { name: 'closed', label: '已关闭' },
+]
 
 const list = ref([])
 const loading = ref(false)
@@ -113,6 +121,17 @@ const processForm = reactive({ handled_by: '', remark: '' })
 const resolveForm = reactive({ result: '' })
 
 const { resolveItems, userNames, propertyNames } = useNameResolver()
+
+const tabCounts = computed(() => {
+  const counts = {}
+  STATUS_TABS.forEach(t => { counts[t.name] = 0 })
+  const all = list.value || []
+  counts[''] = all.length
+  for (const item of all) {
+    if (counts[item.status] !== undefined) counts[item.status]++
+  }
+  return counts
+})
 
 const statusMap = {
   open: '待处理',
@@ -130,6 +149,11 @@ const statusTypeMap = {
 function statusLabel(s) { return statusMap[s] || s }
 function statusType(s) { return statusTypeMap[s] || 'info' }
 function formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : '' }
+
+function onTabChange() {
+  currentPage.value = 1
+  loadData()
+}
 
 async function loadData() {
   loading.value = true

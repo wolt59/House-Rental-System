@@ -97,23 +97,37 @@ def list_properties(
     )
 
 
-@router.get("/my", response_model=List[Property])
+@router.get("/my", response_model=PaginatedResponse)
 def list_my_properties(
     skip: int = 0,
     limit: int = 20,
     region: Optional[str] = None,
     floor_plan: Optional[str] = None,
+    review_status: Optional[str] = None,
+    status: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_active_landlord),
 ):
-    return crud_property.get_properties(
+    properties = crud_property.get_properties(
         db,
         skip=skip,
         limit=limit,
         region=region,
         floor_plan=floor_plan,
         owner_id=current_user.id,
+        review_status=review_status,
+        status=status,
     )
+    total = crud_property.count_properties(
+        db,
+        region=region,
+        floor_plan=floor_plan,
+        owner_id=current_user.id,
+        review_status=review_status,
+        status=status,
+    )
+    items = [Property.model_validate(p).model_dump(mode='json') for p in properties]
+    return {"items": items, "total": total}
 
 
 @router.get("/owner/{owner_id}", response_model=List[Property])
