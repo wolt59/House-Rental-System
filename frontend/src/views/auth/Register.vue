@@ -80,10 +80,26 @@ const validateConfirm = (rule, value, callback) => {
   else callback()
 }
 
+const validatePassword = (rule, value, callback) => {
+  if (!value) {
+    callback(new Error('请输入密码'))
+    return
+  }
+  if (value.length < 8) {
+    callback(new Error('密码长度至少 8 位'))
+    return
+  }
+  if (!/[A-Za-z]/.test(value) || !/\d/.test(value)) {
+    callback(new Error('密码需包含字母与数字'))
+    return
+  }
+  callback()
+}
+
 const rules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 80, message: '用户名3-80字符', trigger: 'blur' },
+    { min: 4, max: 20, message: '用户名长度 4-20 位', trigger: 'blur' },
   ],
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
@@ -91,7 +107,7 @@ const rules = {
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 8, message: '密码至少8位', trigger: 'blur' },
+    { validator: validatePassword, trigger: 'blur' },
   ],
   confirmPassword: [
     { required: true, message: '请确认密码', trigger: 'blur' },

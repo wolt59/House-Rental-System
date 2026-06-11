@@ -4,7 +4,7 @@
       <h2>合同管理</h2>
     </div>
 
-    <el-tabs v-model="activeTab" class="contract-tabs">
+    <el-tabs v-model="activeTab" class="contract-tabs" @tab-change="onTabChange">
       <el-tab-pane
         v-for="tab in CONTRACT_TABS"
         :key="tab.name"
@@ -158,6 +158,10 @@
       v-if="!loading && displayContracts.length === 0"
       :description="emptyDescription"
     />
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="onPageChange" />
+    </div>
 
     <!-- 对话框 -->
     <el-dialog v-model="detailVisible" title="合同详情" width="700px">
@@ -389,9 +393,18 @@ const activeTab = ref('all')
 const contracts = ref([])
 const applications = ref([])
 const loading = ref(false)
+const pageSize = ref(10)
+const currentPage = ref(1)
+const total = ref(0)
 const { tabCounts, contractsForTab } = useContractListTabs(contracts, applications)
 
-const displayContracts = computed(() => contractsForTab(activeTab.value))
+const filteredContracts = computed(() => contractsForTab(activeTab.value))
+const displayContracts = computed(() => {
+  const list = filteredContracts.value
+  total.value = list.length
+  const start = (currentPage.value - 1) * pageSize.value
+  return list.slice(start, start + pageSize.value)
+})
 const tableColumns = useContractTableColumns(activeTab)
 
 const emptyDescription = computed(() => {
@@ -467,6 +480,12 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+function onPageChange() {}
+
+function onTabChange() {
+  currentPage.value = 1
 }
 
 function handleSign(row) {

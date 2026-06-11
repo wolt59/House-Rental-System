@@ -46,6 +46,9 @@
           </div>
         </el-card>
       </div>
+      <div class="pagination-wrap" v-if="searchTotal > pageSize">
+        <el-pagination background layout="prev, pager, next" :total="searchTotal" :page-size="pageSize" v-model:current-page="searchPage" @current-change="doSearch" />
+      </div>
     </div>
   </div>
 </template>
@@ -63,6 +66,12 @@ const searchResults = ref([])
 const regionLoading = ref(false)
 const fpLoading = ref(false)
 
+const searchTotal = ref(0)
+const pageSize = ref(12)
+const searchPage = ref(1)
+let currentSearchType = ''
+let currentSearchValue = ''
+
 function getCoverImage(p) {
   if (p.images && p.images.length > 0) {
     const cover = p.images.find((i) => i.is_cover === 1)
@@ -71,22 +80,34 @@ function getCoverImage(p) {
   return 'https://via.placeholder.com/300x200?text=No+Image'
 }
 
-async function searchByRegion(region) {
+async function doSearch() {
+  if (!currentSearchType || !currentSearchValue) return
   try {
-    const res = await getProperties({ region, limit: 20 })
+    const params = {
+      [currentSearchType]: currentSearchValue,
+      skip: (searchPage.value - 1) * pageSize.value,
+      limit: pageSize.value,
+    }
+    const res = await getProperties(params)
     searchResults.value = (res && res.items) || []
+    searchTotal.value = (res && res.total) || 0
   } catch (e) {
-    ElMessage.error('按地区搜索失败')
+    ElMessage.error('搜索失败')
   }
 }
 
+async function searchByRegion(region) {
+  currentSearchType = 'region'
+  currentSearchValue = region
+  searchPage.value = 1
+  await doSearch()
+}
+
 async function searchByFloorPlan(floor_plan) {
-  try {
-    const res = await getProperties({ floor_plan, limit: 20 })
-    searchResults.value = (res && res.items) || []
-  } catch (e) {
-    ElMessage.error('按户型搜索失败')
-  }
+  currentSearchType = 'floor_plan'
+  currentSearchValue = floor_plan
+  searchPage.value = 1
+  await doSearch()
 }
 
 onMounted(async () => {

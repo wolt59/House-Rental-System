@@ -107,7 +107,8 @@ def list_complaints(
         query = query.filter(Complaint.status == status)
     total = query.count()
     items = query.offset(skip).limit(limit).all()
-    return {"items": items, "total": total}
+    serialized_items = [ComplaintSchema.model_validate(c).model_dump(mode='json') for c in items]
+    return {"items": serialized_items, "total": total}
 
 
 @router.get("/{complaint_id}", response_model=ComplaintSchema)

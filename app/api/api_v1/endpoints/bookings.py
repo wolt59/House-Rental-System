@@ -134,7 +134,8 @@ def list_bookings(
 
     total = query.count()
     items = query.offset(skip).limit(limit).all()
-    return {"items": items, "total": total}
+    serialized_items = [BookingSchema.model_validate(b).model_dump(mode='json') for b in items]
+    return {"items": serialized_items, "total": total}
 
 
 @router.get("/{booking_id}", response_model=BookingSchema)

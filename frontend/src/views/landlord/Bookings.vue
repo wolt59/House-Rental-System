@@ -13,11 +13,12 @@
       </div>
     </div>
     
-    <el-tabs v-model="activeTab" @tab-change="loadData">
-      <el-tab-pane label="全部" name="all" />
-      <el-tab-pane label="待处理" name="pending" />
-      <el-tab-pane label="已处理" name="processed" />
-      <el-tab-pane label="未来日程" name="upcoming" />
+    <el-tabs v-model="activeTab" @tab-change="onTabChange">
+      <el-tab-pane v-for="tab in BOOKING_TABS" :key="tab.name" :name="tab.name">
+        <template #label>
+          <span>{{ tab.label }} ({{ tabCounts[tab.name] ?? 0 }})</span>
+        </template>
+      </el-tab-pane>
     </el-tabs>
 
     <el-table :data="bookings" stripe v-loading="loading" style="width: 100%">
@@ -50,7 +51,7 @@
 
     </el-table>
     <el-empty v-if="!loading && bookings.length === 0" description="暂无数据" />
-    <div class="pagination-wrap" v-if="total >= pageSize && activeTab !== 'all'">
+    <div class="pagination-wrap" v-if="total >= pageSize">
       <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
     </div>
 
@@ -117,7 +118,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getBookings, approveBooking, rejectBooking, rescheduleBooking, completeBooking } from '../../api/booking'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useNameResolver } from '../../composables/useNameResolver'
@@ -140,6 +141,13 @@ const currentItem = ref(null)
 const rejectForm = reactive({ reason: '' })
 const rescheduleForm = reactive({ appointment_time: '', message: '' })
 
+const BOOKING_TABS = [
+  { name: 'all', label: '全部' },
+  { name: 'pending', label: '待处理' },
+  { name: 'processed', label: '已处理' },
+  { name: 'upcoming', label: '未来日程' },
+]
+
 const statusMap = { 
   pending: '待确认', 
   approved: '已同意', 
@@ -160,6 +168,24 @@ function statusLabel(s) { return statusMap[s] || s }
 function statusType(s) { return statusTypeMap[s] || 'info' }
 function formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : '' }
 
+const tabCounts = computed(() => {
+  const counts = {}
+  BOOKING_TABS.forEach(t => { counts[t.name] = 0 })
+  const all = bookings.value || []
+  counts.all = all.length
+  for (const b of all) {
+    if (b.status === 'pending') counts.pending++
+    if (['approved', 'completed', 'rejected', 'cancelled', 'negotiating'].includes(b.status)) counts.processed++
+    if (b.status === 'approved' && new Date(b.appointment_time) > new Date()) counts.upcoming++
+  }
+  return counts
+})
+
+function onTabChange() {
+  currentPage.value = 1
+  loadData()
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -173,10 +199,6 @@ async function loadData() {
       params.status = 'pending'
     } else if (activeTab.value === 'processed') {
       params.status = 'approved,completed,rejected,cancelled,negotiating'
-    } else if (activeTab.value === 'all') {
-      // "全部"展示所有记录，不做分页
-      params.limit = 9999
-      params.skip = 0
     } else if (activeTab.value === 'upcoming') {
       // 未来日程：后端筛选已同意状态，前端再按时间过滤
       const res = await getBookings({ status: 'approved', skip: 0, limit: 100, sort_by: sortBy.value, sort_order: sortOrder.value })

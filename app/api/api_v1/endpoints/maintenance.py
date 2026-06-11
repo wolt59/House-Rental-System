@@ -109,7 +109,8 @@ def list_maintenance(
         query = query.filter(MaintenanceRequest.status == status)
     total = query.count()
     items = query.offset(skip).limit(limit).all()
-    return {"items": items, "total": total}
+    serialized_items = [Maintenance.model_validate(m).model_dump(mode='json') for m in items]
+    return {"items": serialized_items, "total": total}
 
 
 @router.get("/{request_id}", response_model=Maintenance)

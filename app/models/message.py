@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, DateTime, Text
+from sqlalchemy import BigInteger, Boolean, Column, Integer, String, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -12,9 +12,15 @@ class Message(Base):
     from_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     to_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=True)
+    # 消息类型：text / image / file / audio / video / system / notification
     message_type = Column(String(30), default="text", index=True)
-    content = Column(String(5000), nullable=False)
+    content = Column(String(5000), nullable=False, default="")
     link = Column(String(500), nullable=True)
+    # 媒体/文件相关字段
+    file_url = Column(String(500), nullable=True)
+    file_name = Column(String(255), nullable=True)
+    file_size = Column(BigInteger, nullable=True)
+    mime_type = Column(String(120), nullable=True)
     is_read = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

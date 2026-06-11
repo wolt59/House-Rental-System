@@ -3,6 +3,14 @@
     <div class="page-header">
       <h2>投诉管理</h2>
     </div>
+    <el-tabs v-model="statusFilter" @tab-change="onFilterChange" style="margin-bottom: 12px">
+      <el-tab-pane v-for="tab in STATUS_TABS" :key="tab.name" :name="tab.name">
+        <template #label>
+          <span>{{ tab.label }} ({{ tabCounts[tab.name] ?? 0 }})</span>
+        </template>
+      </el-tab-pane>
+    </el-tabs>
+
     <el-table :data="list" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column label="房源" min-width="100" show-overflow-tooltip>
@@ -78,7 +86,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getComplaints, updateComplaint } from '../../api/complaint'
 import { ElMessage } from 'element-plus'
 import { useNameResolver } from '../../composables/useNameResolver'
@@ -97,6 +105,31 @@ const currentItem = ref(null)
 const processForm = reactive({ handled_by: '', remark: '' })
 const resolveForm = reactive({ result: '' })
 
+const STATUS_TABS = [
+  { name: '', label: '全部' },
+  { name: 'open', label: '待处理' },
+  { name: 'in_progress', label: '处理中' },
+  { name: 'resolved', label: '已解决' },
+  { name: 'closed', label: '已关闭' },
+]
+const statusFilter = ref('')
+
+const tabCounts = computed(() => {
+  const counts = {}
+  STATUS_TABS.forEach(t => { counts[t.name] = 0 })
+  const all = list.value || []
+  counts[''] = all.length
+  for (const item of all) {
+    if (counts[item.status] !== undefined) counts[item.status]++
+  }
+  return counts
+})
+
+function onFilterChange() {
+  currentPage.value = 1
+  loadData()
+}
+
 const statusMap = { open: '待处理', in_progress: '处理中', resolved: '已解决', closed: '已关闭' }
 const statusTypeMap = { open: 'danger', in_progress: 'warning', resolved: 'success', closed: 'info' }
 
@@ -107,7 +140,9 @@ function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : ''
 async function loadData() {
   loading.value = true
   try {
-    const res = await getComplaints({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
+    const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
+    if (statusFilter.value) params.status = statusFilter.value
+    const res = await getComplaints(params)
     list.value = res.items || []
     await resolveItems(list.value, ['tenant_id', 'property_id'])
     total.value = res.total || 0

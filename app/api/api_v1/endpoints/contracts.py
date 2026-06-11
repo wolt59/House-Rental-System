@@ -217,14 +217,15 @@ def list_contracts(
         print(f"检查过期合同时出错: {e}")
 
     if current_user.role == "admin":
-        items = crud_contract.get_contracts(db, status=status_filter, skip=skip, limit=limit)
+        contracts = crud_contract.get_contracts(db, status=status_filter, skip=skip, limit=limit)
         total = crud_contract.count_contracts(db, status=status_filter)
     elif current_user.role == "landlord":
-        items = crud_contract.get_contracts(db, landlord_id=current_user.id, status=status_filter, skip=skip, limit=limit)
+        contracts = crud_contract.get_contracts(db, landlord_id=current_user.id, status=status_filter, skip=skip, limit=limit)
         total = crud_contract.count_contracts(db, landlord_id=current_user.id, status=status_filter)
     else:
-        items = crud_contract.get_contracts(db, tenant_id=current_user.id, status=status_filter, skip=skip, limit=limit)
+        contracts = crud_contract.get_contracts(db, tenant_id=current_user.id, status=status_filter, skip=skip, limit=limit)
         total = crud_contract.count_contracts(db, tenant_id=current_user.id, status=status_filter)
+    items = [ContractSchema.model_validate(c).model_dump(mode='json') for c in contracts]
     return {"items": items, "total": total}
 
 

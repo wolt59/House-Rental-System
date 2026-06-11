@@ -290,7 +290,7 @@ async function loadData() {
 async function loadProperties() {
   try {
     const res = await getMyProperties({ skip: 0, limit: 200 })
-    myProperties.value = Array.isArray(res) ? res : []
+    myProperties.value = (res && res.items) || []
   } catch (e) {
     console.error('加载房源列表失败', e)
   }

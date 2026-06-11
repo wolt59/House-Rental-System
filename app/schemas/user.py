@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from typing import Optional
 
 from pydantic import BaseModel, EmailStr, constr, validator
@@ -7,7 +8,7 @@ from app.schemas.common import UTCDatetimeModel
 
 
 class UserBase(BaseModel):
-    username: constr(min_length=3, max_length=80)
+    username: constr(min_length=4, max_length=20)
     email: EmailStr
     phone: Optional[str] = None
     full_name: Optional[str] = None
@@ -20,8 +21,21 @@ class UserBase(BaseModel):
         return v
 
 
+def _validate_password_complexity(value: str) -> str:
+    """密码需至少 8 位，且同时包含字母与数字"""
+    if len(value) < 8:
+        raise ValueError("密码长度至少 8 位")
+    if not re.search(r"[A-Za-z]", value) or not re.search(r"\d", value):
+        raise ValueError("密码需包含字母与数字")
+    return value
+
+
 class UserCreate(UserBase):
-    password: constr(min_length=8)
+    password: str
+
+    @validator("password")
+    def password_complexity(cls, v):
+        return _validate_password_complexity(v)
 
 
 class UserUpdate(BaseModel):
@@ -34,7 +48,11 @@ class UserUpdate(BaseModel):
 
 class PasswordChange(BaseModel):
     old_password: str
-    new_password: constr(min_length=8)
+    new_password: str
+
+    @validator("new_password")
+    def password_complexity(cls, v):
+        return _validate_password_complexity(v)
 
 
 class UserInDBBase(UserBase, UTCDatetimeModel):

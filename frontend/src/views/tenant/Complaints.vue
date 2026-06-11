@@ -4,6 +4,14 @@
       <h2>投诉管理</h2>
       <el-button type="primary" @click="showDialog = true">提交投诉</el-button>
     </div>
+    <el-tabs v-model="statusFilter" @tab-change="onFilterChange" style="margin-bottom: 12px">
+      <el-tab-pane label="全部" name="" />
+      <el-tab-pane label="待处理" name="open" />
+      <el-tab-pane label="处理中" name="in_progress" />
+      <el-tab-pane label="已解决" name="resolved" />
+      <el-tab-pane label="已关闭" name="closed" />
+    </el-tabs>
+
     <el-table :data="list" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="title" label="标题" width="200" />
@@ -83,12 +91,18 @@ const detailVisible = ref(false)
 const submitting = ref(false)
 const currentItem = ref(null)
 const myProperties = ref([])
+const statusFilter = ref('')
 const form = reactive({ property_id: '', complaint_type: '', title: '', content: '' })
 
 const statusMap = { open: '待处理', in_progress: '处理中', resolved: '已解决', closed: '已关闭' }
 const statusTypeMap = { open: 'danger', in_progress: 'warning', resolved: 'success', closed: 'info' }
 function statusLabel(s) { return statusMap[s] || s }
 function statusType(s) { return statusTypeMap[s] || 'info' }
+
+function onFilterChange() {
+  currentPage.value = 1
+  loadData()
+}
 
 async function loadMyProperties() {
   try {
@@ -102,7 +116,9 @@ async function loadMyProperties() {
 async function loadData() {
   loading.value = true
   try {
-    const res = await getComplaints({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
+    const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
+    if (statusFilter.value) params.status = statusFilter.value
+    const res = await getComplaints(params)
     list.value = res.items || []
     total.value = res.total || 0
   } catch (e) {

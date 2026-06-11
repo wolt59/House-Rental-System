@@ -73,8 +73,46 @@
               <el-avatar v-if="msg.from_user_id !== currentUserId" :size="32" class="msg-avatar">
                 {{ activePeerName?.charAt(0) || '?' }}
               </el-avatar>
-              <div :class="['message-bubble', msg.from_user_id === currentUserId ? 'bubble-self' : 'bubble-peer']">
-                <div class="bubble-content">{{ msg.content }}</div>
+              <div :class="['message-bubble', msg.from_user_id === currentUserId ? 'bubble-self' : 'bubble-peer', `bubble-${msg.message_type}`]">
+                <!-- 文本消息 -->
+                <div v-if="msg.message_type === 'text' || msg.message_type === 'system' || msg.message_type === 'notification'" class="bubble-content">
+                  {{ msg.content }}
+                </div>
+                <!-- 图片消息 -->
+                <div v-else-if="msg.message_type === 'image'" class="bubble-media">
+                  <el-image
+                    :src="absoluteUrl(msg.file_url)"
+                    :preview-src-list="[absoluteUrl(msg.file_url)]"
+                    :preview-teleported="true"
+                    fit="cover"
+                    class="bubble-image"
+                    :initial-index="0"
+                  />
+                  <div v-if="msg.content" class="bubble-media-caption">{{ msg.content }}</div>
+                </div>
+                <!-- 音频消息 -->
+                <div v-else-if="msg.message_type === 'audio'" class="bubble-media">
+                  <audio :src="absoluteUrl(msg.file_url)" controls preload="metadata" class="bubble-audio"></audio>
+                  <div v-if="msg.content" class="bubble-media-caption">{{ msg.content }}</div>
+                </div>
+                <!-- 视频消息 -->
+                <div v-else-if="msg.message_type === 'video'" class="bubble-media">
+                  <video :src="absoluteUrl(msg.file_url)" controls preload="metadata" class="bubble-video"></video>
+                  <div v-if="msg.content" class="bubble-media-caption">{{ msg.content }}</div>
+                </div>
+                <!-- 文件消息 -->
+                <div v-else-if="msg.message_type === 'file'" class="bubble-file">
+                  <el-icon class="bubble-file-icon"><Document /></el-icon>
+                  <div class="bubble-file-info">
+                    <a :href="absoluteUrl(msg.file_url)" :download="msg.file_name || ''" class="bubble-file-name" target="_blank" rel="noopener">
+                      {{ msg.file_name || '下载文件' }}
+                    </a>
+                    <div class="bubble-file-meta">{{ formatFileSize(msg.file_size) }}</div>
+                  </div>
+                  <el-icon class="bubble-file-download"><Download /></el-icon>
+                </div>
+                <!-- 兜底 -->
+                <div v-else class="bubble-content">{{ msg.content || msg.message_type }}</div>
                 <div class="bubble-time">{{ formatTime(msg.created_at) }}</div>
               </div>
               <el-avatar v-if="msg.from_user_id === currentUserId" :size="32" class="msg-avatar">
@@ -86,27 +124,89 @@
               <span>加载更多...</span>
             </div>
           </div>
-          <div class="message-input-area">
-            <el-input
-              v-model="inputContent"
-              type="textarea"
-              :rows="3"
-              placeholder="输入消息..."
-              maxlength="5000"
-              show-word-limit
-              @keydown.enter.exact="handleSend"
-              :disabled="sending"
-            />
+
+          <!-- 待发送的附件预览 -->
+          <div v-if="pendingFile" class="pending-file-bar">
+            <div class="pending-file-preview">
+              <el-image
+                v-if="pendingFile.message_type === 'image'"
+                :src="pendingFile.preview"
+                fit="cover"
+                class="pending-thumb"
+                :preview-src-list="[pendingFile.preview]"
+                :preview-teleported="true"
+              />
+              <el-icon v-else class="pending-icon">
+                <Document />
+              </el-icon>
+            </div>
+            <div class="pending-file-info">
+              <div class="pending-file-name">{{ pendingFile.name }}</div>
+              <div class="pending-file-meta">
+                {{ formatFileSize(pendingFile.size) }}
+                <span v-if="pendingFile.message_type !== 'image'">· {{ fileTypeLabel(pendingFile.message_type) }}</span>
+              </div>
+              <el-progress
+                v-if="uploadProgress > 0 && uploadProgress < 100"
+                :percentage="uploadProgress"
+                :stroke-width="3"
+                class="pending-progress"
+              />
+            </div>
             <el-button
-              type="primary"
-              :loading="sending"
-              :disabled="!inputContent.trim()"
-              @click="handleSend"
-              class="send-btn"
-              round
-            >
-              发送
-            </el-button>
+              v-if="!sending"
+              link
+              type="danger"
+              :icon="CircleClose"
+              @click="clearPendingFile"
+              class="pending-remove"
+            />
+          </div>
+
+          <div class="message-input-area">
+            <div class="input-toolbar">
+              <el-tooltip content="发送图片" placement="top">
+                <el-button :icon="Picture" link @click="triggerImagePicker" :disabled="sending" class="tool-btn" />
+              </el-tooltip>
+              <el-tooltip content="发送文件" placement="top">
+                <el-button :icon="Paperclip" link @click="triggerFilePicker" :disabled="sending" class="tool-btn" />
+              </el-tooltip>
+            </div>
+            <div class="input-row">
+              <el-input
+                v-model="inputContent"
+                type="textarea"
+                :rows="3"
+                placeholder="输入消息..."
+                maxlength="5000"
+                show-word-limit
+                @keydown.enter.exact="handleSend"
+                :disabled="sending"
+              />
+              <el-button
+                type="primary"
+                :loading="sending"
+                :disabled="!canSend"
+                @click="handleSend"
+                class="send-btn"
+                round
+              >
+                发送
+              </el-button>
+            </div>
+            <input
+              ref="imageInputRef"
+              type="file"
+              accept="image/*"
+              class="hidden-input"
+              @change="onFileSelected"
+            />
+            <input
+              ref="fileInputRef"
+              type="file"
+              class="hidden-input"
+              @change="onFileSelected"
+            />
           </div>
         </template>
       </div>
@@ -118,7 +218,9 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Loading } from '@element-plus/icons-vue'
+import {
+  Search, Loading, Picture, Paperclip, Document, Download, CircleClose,
+} from '@element-plus/icons-vue'
 import { useUserStore } from '../../store/user'
 import {
   getConversations,
@@ -126,6 +228,7 @@ import {
   sendMessage,
   markConversationRead,
   searchUsers,
+  uploadChatFile,
   createWebSocket,
 } from '../../api/message'
 
@@ -147,6 +250,13 @@ const loadingMore = ref(false)
 const hasMore = ref(true)
 const currentPage = ref(0)
 const PAGE_SIZE = 30
+
+// 文件上传相关
+const imageInputRef = ref(null)
+const fileInputRef = ref(null)
+const pendingFile = ref(null) // { file, name, size, preview, message_type }
+const uploadProgress = ref(0)
+const lastPickerWasImage = ref(false)
 
 const convPanelWidth = ref(320)
 const MIN_CONV_WIDTH = 240
@@ -185,6 +295,7 @@ function resetConvWidth() {
 
 const currentUserId = computed(() => userStore.user?.id)
 const currentUserName = computed(() => userStore.user?.full_name || userStore.user?.username)
+const canSend = computed(() => Boolean((inputContent.value && inputContent.value.trim()) || pendingFile.value))
 
 let ws = null
 let wsReconnectTimer = null
@@ -212,6 +323,34 @@ function formatTime(d) {
   }
   return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ' ' +
     date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatFileSize(size) {
+  if (size === null || size === undefined) return ''
+  const n = Number(size)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+function absoluteUrl(url) {
+  if (!url) return ''
+  if (/^https?:\/\//i.test(url)) return url
+  return window.location.origin + url
+}
+
+function fileTypeLabel(type) {
+  return { image: '图片', file: '文件', audio: '语音', video: '视频' }[type] || '附件'
+}
+
+function inferMessageType(file) {
+  const mime = (file.type || '').toLowerCase()
+  if (mime.startsWith('image/')) return 'image'
+  if (mime.startsWith('audio/')) return 'audio'
+  if (mime.startsWith('video/')) return 'video'
+  return 'file'
 }
 
 async function loadConversations() {
@@ -331,29 +470,143 @@ async function handleSearchUsers() {
   }
 }
 
+function triggerImagePicker() {
+  lastPickerWasImage.value = true
+  if (imageInputRef.value) imageInputRef.value.value = ''
+  imageInputRef.value?.click()
+}
+
+function triggerFilePicker() {
+  lastPickerWasImage.value = false
+  if (fileInputRef.value) fileInputRef.value.value = ''
+  fileInputRef.value?.click()
+}
+
+function onFileSelected(e) {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  if (file.size > 20 * 1024 * 1024) {
+    ElMessage.error('文件大小不能超过 20MB')
+    return
+  }
+  const messageType = lastPickerWasImage.value ? 'image' : inferMessageType(file)
+  const preview = messageType === 'image' ? URL.createObjectURL(file) : ''
+  pendingFile.value = {
+    file,
+    name: file.name,
+    size: file.size,
+    preview,
+    message_type: messageType,
+  }
+  uploadProgress.value = 0
+}
+
+function clearPendingFile() {
+  if (pendingFile.value?.preview) {
+    URL.revokeObjectURL(pendingFile.value.preview)
+  }
+  pendingFile.value = null
+  uploadProgress.value = 0
+}
+
+function previewTextFor(pending, caption) {
+  const t = pending.message_type
+  if (t === 'file') return `[文件] ${pending.name}`
+  if (caption) return `[${fileTypeLabel(t)}] ${caption}`
+  return `[${fileTypeLabel(t)}]`
+}
+
+function updateConversationPreview(msg) {
+  const conv = conversations.value.find(c => c.participant.id === activeConversationId.value)
+  if (!conv) return
+  const caption = msg.content || ''
+  if (msg.message_type === 'text') {
+    conv.last_message = caption.substring(0, 80)
+  } else if (msg.message_type === 'file') {
+    conv.last_message = `[文件] ${msg.file_name || ''}`.substring(0, 80)
+  } else {
+    conv.last_message = previewTextFor({ message_type: msg.message_type }, caption)
+  }
+  conv.last_message_time = msg.created_at || new Date().toISOString()
+  conv.last_message_type = msg.message_type
+  // 把最新会话置顶
+  const idx = conversations.value.indexOf(conv)
+  if (idx > 0) {
+    conversations.value.splice(idx, 1)
+    conversations.value.unshift(conv)
+  }
+}
+
 async function handleSend(e) {
   if (e && e.shiftKey) return
   if (e) e.preventDefault()
-  const content = inputContent.value.trim()
-  if (!content || !activeConversationId.value) return
+  if (!activeConversationId.value || sending.value) return
+
+  const caption = inputContent.value.trim()
+  if (pendingFile.value) {
+    await sendFileMessage(caption)
+  } else {
+    if (!caption) return
+    await sendTextMessage(caption)
+  }
+}
+
+async function sendTextMessage(content) {
   sending.value = true
   try {
     const msg = await sendMessage({
       to_user_id: activeConversationId.value,
-      content: content,
+      content,
+      message_type: 'text',
     })
     messages.value.push(msg)
     inputContent.value = ''
     await nextTick()
     scrollToBottom()
-    const conv = conversations.value.find(c => c.participant.id === activeConversationId.value)
-    if (conv) {
-      conv.last_message = content.substring(0, 80)
-      conv.last_message_time = msg.created_at || new Date().toISOString()
-      conv.last_message_type = 'text'
-    }
+    updateConversationPreview(msg)
   } catch (e) {
     ElMessage.error('发送消息失败')
+  } finally {
+    sending.value = false
+  }
+}
+
+async function sendFileMessage(caption) {
+  const pending = pendingFile.value
+  if (!pending) return
+  sending.value = true
+  uploadProgress.value = 0
+  let uploaded = null
+  try {
+    uploaded = await uploadChatFile(pending.file, (ev) => {
+      if (ev.total) {
+        uploadProgress.value = Math.round((ev.loaded / ev.total) * 100)
+      }
+    })
+  } catch (e) {
+    ElMessage.error('文件上传失败')
+    sending.value = false
+    return
+  }
+
+  try {
+    const msg = await sendMessage({
+      to_user_id: activeConversationId.value,
+      content: caption,
+      message_type: uploaded.message_type || pending.message_type,
+      file_url: uploaded.url,
+      file_name: uploaded.original_name || pending.name,
+      file_size: uploaded.size,
+      mime_type: uploaded.mime_type,
+    })
+    messages.value.push(msg)
+    clearPendingFile()
+    inputContent.value = ''
+    await nextTick()
+    scrollToBottom()
+    updateConversationPreview(msg)
+  } catch (e) {
+    ElMessage.error('消息发送失败')
   } finally {
     sending.value = false
   }
@@ -398,12 +651,31 @@ function handleIncomingMessage(data) {
   totalUnread.value = data.unread_count || (totalUnread.value + 1)
   window.dispatchEvent(new CustomEvent('unread-changed', { detail: { count: totalUnread.value } }))
   if (activeConversationId.value === msg.from_user_id) {
-    messages.value.push(msg)
-    nextTick(() => scrollToBottom())
+    // 避免重复
+    if (!messages.value.find(m => m.id === msg.id)) {
+      messages.value.push(msg)
+      nextTick(() => scrollToBottom())
+    }
     markConversationRead(msg.from_user_id).catch((e) => console.error(e))
+    // 同步更新会话预览
+    const conv = conversations.value.find(c => c.participant.id === msg.from_user_id)
+    if (conv) updateConversationPreviewOnIncoming(conv, msg)
   } else {
     loadConversations()
   }
+}
+
+function updateConversationPreviewOnIncoming(conv, msg) {
+  const caption = msg.content || ''
+  if (msg.message_type === 'text') {
+    conv.last_message = caption.substring(0, 80)
+  } else if (msg.message_type === 'file') {
+    conv.last_message = `[文件] ${msg.file_name || ''}`.substring(0, 80)
+  } else {
+    conv.last_message = previewTextFor({ message_type: msg.message_type }, caption)
+  }
+  conv.last_message_time = msg.created_at || new Date().toISOString()
+  conv.last_message_type = msg.message_type
 }
 
 onMounted(async () => {
@@ -442,6 +714,9 @@ onBeforeUnmount(() => {
     ws.onclose = null
     ws.close()
     ws = null
+  }
+  if (pendingFile.value?.preview) {
+    URL.revokeObjectURL(pendingFile.value.preview)
   }
 })
 </script>
@@ -722,10 +997,187 @@ onBeforeUnmount(() => {
   color: #909399;
 }
 
+/* 媒体类消息：去掉 padding 占位以方便图像/文件显示 */
+.bubble-image,
+.bubble-audio,
+.bubble-video,
+.bubble-file {
+  padding: 8px 12px;
+}
+
+.bubble-media {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bubble-image {
+  max-width: 240px;
+  max-height: 240px;
+  border-radius: 8px;
+  display: block;
+  cursor: pointer;
+}
+
+.bubble-audio {
+  width: 240px;
+  outline: none;
+}
+
+.bubble-video {
+  max-width: 320px;
+  max-height: 240px;
+  border-radius: 6px;
+  background: #000;
+}
+
+.bubble-media-caption {
+  font-size: 13px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.bubble-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+}
+
+.bubble-file-icon {
+  font-size: 32px;
+  color: #409eff;
+  flex-shrink: 0;
+}
+
+.bubble-self .bubble-file-icon {
+  color: #fff;
+}
+
+.bubble-file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bubble-file-name {
+  font-size: 14px;
+  color: inherit;
+  text-decoration: none;
+  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.bubble-file-name:hover {
+  text-decoration: underline;
+}
+
+.bubble-file-meta {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.bubble-file-download {
+  font-size: 18px;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.pending-file-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid #e4e7ed;
+  background: #fafbfc;
+}
+
+.pending-file-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f0f2f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pending-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pending-icon {
+  font-size: 28px;
+  color: #909399;
+}
+
+.pending-file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pending-file-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #303133;
+  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+.pending-file-meta {
+  font-size: 12px;
+  color: #909399;
+}
+
+.pending-progress {
+  margin-top: 2px;
+}
+
+.pending-remove {
+  flex-shrink: 0;
+}
+
 .message-input-area {
-  padding: 12px 20px;
+  padding: 8px 20px 12px;
   border-top: 1px solid #e4e7ed;
   background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-toolbar {
+  display: flex;
+  gap: 4px;
+}
+
+.tool-btn {
+  font-size: 18px;
+  color: #606266;
+}
+
+.tool-btn:hover {
+  color: #409eff;
+}
+
+.input-row {
   display: flex;
   gap: 10px;
   align-items: flex-end;
@@ -738,5 +1190,9 @@ onBeforeUnmount(() => {
 .send-btn {
   flex-shrink: 0;
   height: 36px;
+}
+
+.hidden-input {
+  display: none;
 }
 </style>

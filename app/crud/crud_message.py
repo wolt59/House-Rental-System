@@ -44,14 +44,39 @@ def get_messages_sent(
     )
 
 
+def count_messages_received(
+    db: Session,
+    to_user_id: int,
+    is_read: Optional[bool] = None,
+    message_types: Optional[List[str]] = None,
+) -> int:
+    query = db.query(Message).filter(Message.to_user_id == to_user_id)
+    if is_read is not None:
+        query = query.filter(Message.is_read == is_read)
+    if message_types:
+        query = query.filter(Message.message_type.in_(message_types))
+    return query.count()
+
+
+def count_messages_sent(
+    db: Session,
+    from_user_id: int,
+) -> int:
+    return db.query(Message).filter(Message.from_user_id == from_user_id).count()
+
+
 def create_message(db: Session, from_user_id: int, message_in: MessageCreate) -> Message:
     message = Message(
         from_user_id=from_user_id,
         to_user_id=message_in.to_user_id,
         property_id=message_in.property_id,
         message_type=message_in.message_type or "text",
-        content=message_in.content,
+        content=message_in.content or "",
         link=message_in.link,
+        file_url=message_in.file_url,
+        file_name=message_in.file_name,
+        file_size=message_in.file_size,
+        mime_type=message_in.mime_type,
     )
     db.add(message)
     db.commit()
@@ -174,7 +199,7 @@ def get_conversations(db: Session, user_id: int) -> List[dict]:
     for peer_id in sorted_peers:
         msg = conversation_map[peer_id]
         peer = users_map.get(peer_id)
-        content_preview = msg.content[:80] if msg.content else ""
+        content_preview = _preview_text(msg)
         result.append(
             {
                 "participant": {
@@ -193,6 +218,28 @@ def get_conversations(db: Session, user_id: int) -> List[dict]:
 
     total_unread = sum(item["unread_count"] for item in result)
     return {"conversations": result, "total_unread": total_unread}
+
+
+# 媒体类型消息在会话列表中的友好预览
+_MEDIA_PREVIEW = {
+    "image": "[图片]",
+    "audio": "[语音]",
+    "video": "[视频]",
+    "file": "[文件]",
+}
+
+
+def _preview_text(msg: Message) -> str:
+    """根据消息类型生成会话列表预览文本。"""
+    if msg.message_type in _MEDIA_PREVIEW:
+        prefix = _MEDIA_PREVIEW[msg.message_type]
+        name = msg.file_name or ""
+        if name and msg.message_type == "file":
+            return f"{prefix} {name}"[:80]
+        if msg.content:
+            return f"{prefix} {msg.content[:60]}"[:80]
+        return prefix
+    return (msg.content or "")[:80]
 
 
 def get_conversation_messages(

@@ -37,6 +37,15 @@ export function searchUsers(keyword, limit = 20) {
   return request.get('/api/v1/messages/users/search', { params: { keyword, limit } })
 }
 
+export function uploadChatFile(file, onProgress) {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post('/api/v1/upload/chat', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: onProgress,
+  })
+}
+
 export function createWebSocket(token) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host

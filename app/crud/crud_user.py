@@ -46,12 +46,12 @@ def update_user(db: Session, db_user: User, user_in: UserUpdate):
         db_user.phone = user_in.phone
     if user_in.full_name is not None:
         db_user.full_name = user_in.full_name
+    if user_in.role is not None:
+        db_user.role = user_in.role
     if user_in.avatar_url is not None:
         db_user.avatar_url = user_in.avatar_url
     if user_in.id_card_number is not None:
         db_user.id_card_number = user_in.id_card_number
-    if user_in.role is not None:
-        db_user.role = user_in.role
     db.commit()
     db.refresh(db_user)
     return db_user

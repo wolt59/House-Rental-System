@@ -4,6 +4,26 @@
       <h2>房源管理</h2>
       <el-button type="primary" @click="$router.push('/landlord/property/create')">发布房源</el-button>
     </div>
+
+    <el-form :inline="true" :model="filters" style="margin-bottom: 16px">
+      <el-form-item label="审核状态">
+        <el-select v-model="filters.review_status" clearable placeholder="全部" style="width: 120px" @change="onFilterChange">
+          <el-option label="草稿" value="draft" />
+          <el-option label="待审核" value="pending" />
+          <el-option label="审核中" value="reviewing" />
+          <el-option label="已通过" value="approved" />
+          <el-option label="已拒绝" value="rejected" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="房源状态">
+        <el-select v-model="filters.status" clearable placeholder="全部" style="width: 120px" @change="onFilterChange">
+          <el-option label="已发布" value="published" />
+          <el-option label="未发布" value="unpublished" />
+          <el-option label="已出租" value="rented" />
+        </el-select>
+      </el-form-item>
+    </el-form>
+
     <el-table :data="properties" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="title" label="标题" min-width="150" show-overflow-tooltip />
@@ -37,6 +57,11 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="pagination-wrap" v-if="total >= pageSize">
+      <el-pagination background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
+    </div>
+
     <el-empty v-if="!loading && properties.length === 0" description="暂无房源，点击右上角发布" />
 
     <el-dialog v-model="imageDialogVisible" title="房源图片管理" width="700px">
@@ -62,7 +87,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getMyProperties, deleteProperty, submitForReview, withdrawReview, unpublishProperty, republishProperty, getPropertyImages, addPropertyImage, updatePropertyImage, deletePropertyImage, uploadFile } from '../../api/property'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -74,6 +99,11 @@ const loading = ref(false)
 const imageDialogVisible = ref(false)
 const currentPropertyId = ref(null)
 const images = ref([])
+
+const total = ref(0)
+const pageSize = ref(10)
+const currentPage = ref(1)
+const filters = reactive({ review_status: '', status: '' })
 
 const reviewMap = { draft: '草稿', pending: '待审核', reviewing: '审核中', approved: '已通过', rejected: '已拒绝' }
 const reviewTypeMap = { draft: 'info', pending: 'warning', reviewing: 'primary', approved: 'success', rejected: 'danger' }
@@ -87,8 +117,12 @@ function statusType(s) { return statusTypeMap[s] || 'info' }
 async function loadData() {
   loading.value = true
   try {
-    const res = await getMyProperties({ limit: 50 })
-    properties.value = Array.isArray(res) ? res : []
+    const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
+    if (filters.review_status) params.review_status = filters.review_status
+    if (filters.status) params.status = filters.status
+    const res = await getMyProperties(params)
+    properties.value = (res && res.items) || []
+    total.value = (res && res.total) || 0
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') {
       ElMessage.error('加载房源列表失败')
@@ -96,6 +130,11 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+function onFilterChange() {
+  currentPage.value = 1
+  loadData()
 }
 
 // 提交审核

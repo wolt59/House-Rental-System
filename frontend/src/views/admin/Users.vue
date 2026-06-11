@@ -1,11 +1,12 @@
 <template>
   <div class="page-container">
     <div class="page-header"><h2>用户管理</h2></div>
-    <el-tabs v-model="filters.role" @tab-change="loadData" style="margin-bottom: 8px">
-      <el-tab-pane label="全部" name="" />
-      <el-tab-pane label="租客" name="tenant" />
-      <el-tab-pane label="房东" name="landlord" />
-      <el-tab-pane label="管理员" name="admin" />
+    <el-tabs v-model="filters.role" @tab-change="onTabChange" style="margin-bottom: 8px">
+      <el-tab-pane v-for="tab in ROLE_TABS" :key="tab.name" :name="tab.name">
+        <template #label>
+          <span>{{ tab.label }} ({{ tabCounts[tab.name] ?? 0 }})</span>
+        </template>
+      </el-tab-pane>
     </el-tabs>
     <el-table :data="users" stripe v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
@@ -69,9 +70,16 @@
 
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { getUsers, updateUser, toggleUserStatus } from '../../api/user'
 import { ElMessage } from 'element-plus'
+
+const ROLE_TABS = [
+  { name: '', label: '全部' },
+  { name: 'tenant', label: '租客' },
+  { name: 'landlord', label: '房东' },
+  { name: 'admin', label: '管理员' },
+]
 
 const users = ref([])
 const loading = ref(false)
@@ -84,6 +92,17 @@ const formRef = ref(null)
 const filters = reactive({ role: '' })
 const editForm = reactive({ id: '', phone: '', full_name: '', role: '' })
 
+const tabCounts = computed(() => {
+  const counts = {}
+  ROLE_TABS.forEach(t => { counts[t.name] = 0 })
+  const all = users.value || []
+  counts[''] = all.length
+  for (const user of all) {
+    if (counts[user.role] !== undefined) counts[user.role]++
+  }
+  return counts
+})
+
 const userRules = {
   full_name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
@@ -94,6 +113,11 @@ const roleTypeMap = { admin: 'danger', landlord: 'warning', tenant: 'info' }
 function roleLabel(r) { return roleMap[r] || r }
 function roleType(r) { return roleTypeMap[r] || 'info' }
 function formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : '' }
+
+function onTabChange() {
+  currentPage.value = 1
+  loadData()
+}
 
 async function loadData() {
   loading.value = true

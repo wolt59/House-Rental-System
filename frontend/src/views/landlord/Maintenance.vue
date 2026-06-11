@@ -3,6 +3,14 @@
     <div class="page-header">
       <h2>维修管理</h2>
     </div>
+    <el-tabs v-model="statusFilter" @tab-change="onFilterChange" style="margin-bottom: 12px">
+      <el-tab-pane v-for="tab in STATUS_TABS" :key="tab.name" :name="tab.name">
+        <template #label>
+          <span>{{ tab.label }} ({{ tabCounts[tab.name] ?? 0 }})</span>
+        </template>
+      </el-tab-pane>
+    </el-tabs>
+
     <el-table :data="list" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column label="房源" width="100">
@@ -82,7 +90,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getMaintenances, updateMaintenance } from '../../api/maintenance'
 import { ElMessage } from 'element-plus'
 import { useNameResolver } from '../../composables/useNameResolver'
@@ -101,6 +109,31 @@ const currentItem = ref(null)
 const processForm = reactive({ assigned_to: '', remark: '' })
 const resolveForm = reactive({ feedback: '' })
 
+const STATUS_TABS = [
+  { name: '', label: '全部' },
+  { name: 'new', label: '待处理' },
+  { name: 'in_progress', label: '处理中' },
+  { name: 'resolved', label: '已解决' },
+  { name: 'closed', label: '已关闭' },
+]
+const statusFilter = ref('')
+
+const tabCounts = computed(() => {
+  const counts = {}
+  STATUS_TABS.forEach(t => { counts[t.name] = 0 })
+  const all = list.value || []
+  counts[''] = all.length
+  for (const item of all) {
+    if (counts[item.status] !== undefined) counts[item.status]++
+  }
+  return counts
+})
+
+function onFilterChange() {
+  currentPage.value = 1
+  loadData()
+}
+
 const priorityMap = { low: '低', normal: '普通', high: '高', urgent: '紧急' }
 const priorityTypeMap = { low: 'info', normal: 'info', high: 'warning', urgent: 'danger' }
 const statusMap = { new: '新建', in_progress: '处理中', resolved: '已解决', closed: '已关闭' }
@@ -116,7 +149,9 @@ async function loadData() {
   loading.value = true
   try {
     // 房东查看自己房源的维修申请
-    const res = await getMaintenances({ skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value })
+    const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
+    if (statusFilter.value) params.status = statusFilter.value
+    const res = await getMaintenances(params)
     list.value = res.items || []
     await resolveItems(list.value, ['tenant_id', 'property_id'])
     total.value = res.total || 0

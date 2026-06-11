@@ -320,9 +320,13 @@ CREATE TABLE IF NOT EXISTS messages (
     from_user_id    INT             NOT NULL,
     to_user_id      INT             NOT NULL,
     property_id     INT             DEFAULT NULL,
-    message_type    VARCHAR(30)     NOT NULL DEFAULT 'text'   COMMENT 'text/system/notification',
-    content         VARCHAR(5000)   NOT NULL                  COMMENT '消息内容',
+    message_type    VARCHAR(30)     NOT NULL DEFAULT 'text'   COMMENT 'text/image/file/audio/video/system/notification',
+    content         VARCHAR(5000)   NOT NULL DEFAULT ''      COMMENT '消息内容（文本/媒体消息的描述）',
     link            VARCHAR(500)    DEFAULT NULL              COMMENT '链接',
+    file_url        VARCHAR(500)    DEFAULT NULL              COMMENT '媒体/文件访问URL',
+    file_name       VARCHAR(255)    DEFAULT NULL              COMMENT '原始文件名',
+    file_size       BIGINT          DEFAULT NULL              COMMENT '文件大小（字节）',
+    mime_type       VARCHAR(120)    DEFAULT NULL              COMMENT 'MIME 类型',
     is_read         TINYINT(1)      NOT NULL DEFAULT 0,
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -339,6 +343,15 @@ CREATE TABLE IF NOT EXISTS messages (
     CONSTRAINT fk_message_to      FOREIGN KEY (to_user_id)   REFERENCES users(id)      ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT fk_message_property FOREIGN KEY (property_id)  REFERENCES properties(id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='消息表';
+
+-- 若已存在 messages 表（历史库），请手工执行下列 ALTER 以支持图片/文件消息：
+-- ALTER TABLE messages
+--   MODIFY COLUMN message_type VARCHAR(30) NOT NULL DEFAULT 'text' COMMENT 'text/image/file/audio/video/system/notification',
+--   MODIFY COLUMN content      VARCHAR(5000) NOT NULL DEFAULT '' COMMENT '消息内容（文本/媒体消息的描述）',
+--   ADD COLUMN file_url   VARCHAR(500) DEFAULT NULL COMMENT '媒体/文件访问URL' AFTER link,
+--   ADD COLUMN file_name  VARCHAR(255) DEFAULT NULL COMMENT '原始文件名' AFTER file_url,
+--   ADD COLUMN file_size  BIGINT       DEFAULT NULL COMMENT '文件大小（字节）' AFTER file_name,
+--   ADD COLUMN mime_type  VARCHAR(120) DEFAULT NULL COMMENT 'MIME 类型' AFTER file_size;
 
 -- ============================================================
 -- 10. 新闻表
