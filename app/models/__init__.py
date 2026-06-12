@@ -12,3 +12,4 @@ from app.models.property_image import PropertyImage
 from app.models.contract_application import ContractApplication
 from app.models.contract_change_request import ContractChangeRequest
 from app.models.contract_termination_request import ContractTerminationRequest
+from app.models.property_favorite import PropertyFavorite, PropertyComment

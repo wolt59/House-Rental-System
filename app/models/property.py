@@ -70,3 +70,5 @@ class Property(Base):
     contract_applications = relationship("ContractApplication", back_populates="property")
     payments = relationship("Payment", foreign_keys="Payment.property_id", back_populates="property")
     images = relationship("PropertyImage", back_populates="property", order_by="PropertyImage.sort_order")
+    favorites = relationship("PropertyFavorite", back_populates="property", cascade="all, delete-orphan")
+    comments = relationship("PropertyComment", back_populates="property", cascade="all, delete-orphan")

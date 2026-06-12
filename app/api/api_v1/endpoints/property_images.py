@@ -22,6 +22,10 @@ def add_property_image(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
     if db_property.owner_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    # 限制图片数量最多 9 张
+    existing_images = crud_property_image.get_property_images(db, property_id)
+    if len(existing_images) >= 9:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="最多上传 9 张图片")
     image = crud_property_image.create_property_image(db, property_id=property_id, image_in=image_in)
     ip_address = request.client.host if request.client else None
     crud_audit.create_audit_log(

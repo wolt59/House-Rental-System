@@ -72,6 +72,83 @@
             <p>{{ property.landlord_notes }}</p>
           </div>
         </el-card>
+
+        <!-- 评论区 -->
+        <el-card class="section-card">
+          <div class="section-header comment-header">
+            <h3>💭 房源评论 <span class="comment-count">({{ commentTotal }})</span></h3>
+          </div>
+
+          <!-- 发表评论 -->
+          <div v-if="userStore.isLoggedIn" class="comment-composer">
+            <el-input
+              v-model="newComment"
+              type="textarea"
+              :rows="3"
+              :maxlength="1000"
+              show-word-limit
+              placeholder="说点什么吧…（最多 1000 字）"
+            />
+            <div class="comment-composer-actions">
+              <el-button type="primary" :loading="commentSubmitting" @click="handlePostComment">发表评论</el-button>
+            </div>
+          </div>
+          <div v-else class="comment-login-tip">
+            <el-button type="primary" link @click="$router.push('/login')">登录</el-button>
+            <span>后即可参与评论</span>
+          </div>
+
+          <!-- 评论列表 -->
+          <div v-loading="commentsLoading" class="comment-list">
+            <el-empty v-if="!commentsLoading && comments.length === 0" description="暂无评论，快来抢沙发吧~" :image-size="80" />
+            <div v-for="c in comments" :key="c.id" class="comment-item">
+              <el-avatar :size="40" :src="c.user_avatar" class="comment-avatar">
+                {{ (c.user_name || '?')[0] }}
+              </el-avatar>
+              <div class="comment-body">
+                <div class="comment-meta">
+                  <span class="comment-author">{{ c.user_name || '匿名用户' }}</span>
+                  <el-tag v-if="c.user_role" size="small" :type="roleTagType(c.user_role)" effect="light" round>
+                    {{ roleLabel(c.user_role) }}
+                  </el-tag>
+                  <span class="comment-time">{{ formatDate(c.created_at) }}</span>
+                </div>
+                <div v-if="editingCommentId === c.id" class="comment-edit">
+                  <el-input
+                    v-model="editingContent"
+                    type="textarea"
+                    :rows="2"
+                    :maxlength="1000"
+                    show-word-limit
+                  />
+                  <div class="comment-edit-actions">
+                    <el-button size="small" @click="cancelEditComment">取消</el-button>
+                    <el-button size="small" type="primary" :loading="editSubmitting" @click="handleUpdateComment(c)">保存</el-button>
+                  </div>
+                </div>
+                <div v-else class="comment-content">{{ c.content }}</div>
+                <div v-if="canManageComment(c)" class="comment-actions">
+                  <el-button v-if="editingCommentId !== c.id" link type="primary" @click="startEditComment(c)">编辑</el-button>
+                  <el-popconfirm title="确定要删除这条评论吗？" @confirm="handleDeleteComment(c)">
+                    <template #reference>
+                      <el-button link type="danger">删除</el-button>
+                    </template>
+                  </el-popconfirm>
+                </div>
+              </div>
+            </div>
+            <div v-if="commentTotal > commentPageSize" class="comment-pagination">
+              <el-pagination
+                background
+                layout="prev, pager, next"
+                :total="commentTotal"
+                :page-size="commentPageSize"
+                v-model:current-page="commentCurrentPage"
+                @current-change="loadComments"
+              />
+            </div>
+          </div>
+        </el-card>
       </el-col>
 
       <!-- 右侧：信息展示区 -->
@@ -83,6 +160,12 @@
           <div class="price-tag">
             <span class="price-value">¥{{ property.rent }}</span>
             <span class="price-unit">/月</span>
+          </div>
+
+          <!-- 浏览量 -->
+          <div class="view-stats" v-if="property.view_count !== undefined">
+            <el-icon><View /></el-icon>
+            <span>{{ property.view_count }} 次浏览</span>
           </div>
 
           <!-- 特色标签 -->
@@ -235,15 +318,30 @@
           </div>
 
           <!-- 操作按钮 -->
-          <div class="action-buttons" v-if="userStore.isLoggedIn && userStore.isTenant">
-            <div class="action-btn action-btn-primary" @click="showBookingDialog = true">
-              <el-icon class="btn-icon"><Calendar /></el-icon>
-              <span>预约看房</span>
+          <div class="action-buttons" v-if="userStore.isLoggedIn">
+            <div
+              class="action-btn"
+              :class="isFavorited ? 'action-btn-favorited' : 'action-btn-default'"
+              @click="handleToggleFavorite"
+            >
+              <el-icon class="btn-icon">
+                <component :is="isFavorited ? StarFilled : Star" />
+              </el-icon>
+              <span>{{ isFavorited ? '已收藏' : '收藏房源' }} ({{ favoriteCount }})</span>
             </div>
-            <div class="action-btn action-btn-default" @click="goToChat">
-              <el-icon class="btn-icon"><ChatDotRound /></el-icon>
-              <span>联系房东</span>
-            </div>
+            <template v-if="userStore.isTenant">
+              <div class="action-btn action-btn-primary" @click="showBookingDialog = true">
+                <el-icon class="btn-icon"><Calendar /></el-icon>
+                <span>预约看房</span>
+              </div>
+              <div class="action-btn action-btn-default" @click="goToChat">
+                <el-icon class="btn-icon"><ChatDotRound /></el-icon>
+                <span>联系房东</span>
+              </div>
+            </template>
+          </div>
+          <div v-else class="action-buttons">
+            <el-button type="primary" round @click="$router.push('/login')">登录后收藏与评论</el-button>
           </div>
         </el-card>
       </el-col>
@@ -288,8 +386,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../../store/user'
 import { getProperty } from '../../api/property'
 import { createBooking } from '../../api/booking'
+import {
+  getPropertySummary,
+  toggleFavorite,
+  getPropertyComments,
+  createPropertyComment,
+  updatePropertyComment,
+  deletePropertyComment,
+} from '../../api/propertyInteraction'
 import { ElMessage } from 'element-plus'
-import { Calendar, ChatDotRound } from '@element-plus/icons-vue'
+import { Calendar, ChatDotRound, View, Star, StarFilled } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -306,6 +412,22 @@ const bookingFormRef = ref(null)
 const bookingRules = {
   appointment_time: [{ required: true, message: '请选择预约时间', trigger: 'change' }],
 }
+
+// 收藏 / 评论 相关状态
+const isFavorited = ref(false)
+const favoriteCount = ref(0)
+const favoriteLoading = ref(false)
+
+const comments = ref([])
+const commentsLoading = ref(false)
+const commentTotal = ref(0)
+const commentPageSize = 10
+const commentCurrentPage = ref(1)
+const newComment = ref('')
+const commentSubmitting = ref(false)
+const editingCommentId = ref(null)
+const editingContent = ref('')
+const editSubmitting = ref(false)
 
 function formatLocalISO(date) {
   const pad = (n) => String(n).padStart(2, '0')
@@ -361,6 +483,139 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+
+  // 加载交互信息（收藏/评论摘要）和评论列表
+  await Promise.all([loadSummary(), loadComments()])
+}
+
+async function loadSummary() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const res = await getPropertySummary(route.params.id)
+    isFavorited.value = !!res.is_favorited
+    favoriteCount.value = res.favorite_count || 0
+  } catch (e) {
+    // 静默失败：交互信息非核心
+  }
+}
+
+async function loadComments() {
+  commentsLoading.value = true
+  try {
+    const res = await getPropertyComments(route.params.id, {
+      skip: (commentCurrentPage.value - 1) * commentPageSize,
+      limit: commentPageSize,
+    })
+    comments.value = res.items || []
+    commentTotal.value = res.total || 0
+  } catch (e) {
+    ElMessage.error('加载评论失败')
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+async function handleToggleFavorite() {
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    router.push('/login')
+    return
+  }
+  favoriteLoading.value = true
+  try {
+    const res = await toggleFavorite(parseInt(route.params.id))
+    isFavorited.value = !!res.is_favorited
+    favoriteCount.value = res.favorite_count || 0
+    ElMessage.success(res.is_favorited ? '已加入收藏' : '已取消收藏')
+  } catch (e) {
+    ElMessage.error('操作失败')
+  } finally {
+    favoriteLoading.value = false
+  }
+}
+
+async function handlePostComment() {
+  const content = newComment.value.trim()
+  if (!content) {
+    ElMessage.warning('评论内容不能为空')
+    return
+  }
+  commentSubmitting.value = true
+  try {
+    await createPropertyComment({
+      property_id: parseInt(route.params.id),
+      content,
+    })
+    newComment.value = ''
+    commentCurrentPage.value = 1
+    await loadComments()
+    ElMessage.success('评论发表成功')
+  } catch (e) {
+    ElMessage.error('发表评论失败')
+  } finally {
+    commentSubmitting.value = false
+  }
+}
+
+function startEditComment(c) {
+  editingCommentId.value = c.id
+  editingContent.value = c.content
+}
+
+function cancelEditComment() {
+  editingCommentId.value = null
+  editingContent.value = ''
+}
+
+async function handleUpdateComment(c) {
+  const content = (editingContent.value || '').trim()
+  if (!content) {
+    ElMessage.warning('评论内容不能为空')
+    return
+  }
+  editSubmitting.value = true
+  try {
+    await updatePropertyComment(c.id, { content })
+    c.content = content
+    cancelEditComment()
+    ElMessage.success('已更新')
+  } catch (e) {
+    ElMessage.error('更新失败')
+  } finally {
+    editSubmitting.value = false
+  }
+}
+
+async function handleDeleteComment(c) {
+  try {
+    await deletePropertyComment(c.id)
+    ElMessage.success('已删除')
+    await loadComments()
+  } catch (e) {
+    ElMessage.error('删除失败')
+  }
+}
+
+function canManageComment(c) {
+  if (!userStore.isLoggedIn) return false
+  if (userStore.isAdmin) return true
+  return c.user_id === userStore.user?.id
+}
+
+function roleTagType(role) {
+  return { admin: 'danger', landlord: 'warning', tenant: 'primary' }[role] || 'info'
+}
+
+function roleLabel(role) {
+  return { admin: '管理员', landlord: '房东', tenant: '租客' }[role] || role
+}
+
+function formatDate(d) {
+  if (!d) return ''
+  return new Date(d).toLocaleString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  })
 }
 
 async function handleBooking() {
@@ -490,9 +745,24 @@ onMounted(loadData)
 }
 
 .price-tag {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.view-stats {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #909399;
+  font-size: 13px;
   margin-bottom: 20px;
   padding-bottom: 16px;
   border-bottom: 1px solid #ebeef5;
+}
+
+.view-stats .el-icon {
+  font-size: 14px;
 }
 
 .price-value {
@@ -639,9 +909,120 @@ onMounted(loadData)
   .info-row {
     grid-template-columns: 1fr;
   }
-  
+
   .image-gallery .main-image {
     height: 240px;
   }
+}
+
+/* 收藏按钮 - 已收藏高亮态 */
+.action-btn-favorited {
+  background: #fef0f0;
+  color: #f56c6c;
+  border: 2px solid #f56c6c;
+}
+.action-btn-favorited:hover {
+  background: #fde2e2;
+  border-color: #f56c6c;
+  color: #f56c6c;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 108, 108, 0.25);
+}
+
+/* 评论区 */
+.comment-header h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.comment-count {
+  font-size: 13px;
+  font-weight: 400;
+  color: #909399;
+}
+
+.comment-composer {
+  margin-bottom: 20px;
+}
+.comment-composer-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+.comment-login-tip {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #606266;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.comment-list {
+  min-height: 80px;
+}
+.comment-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px dashed #ebeef5;
+}
+.comment-item:last-child {
+  border-bottom: none;
+}
+.comment-avatar {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  font-weight: 600;
+}
+.comment-body {
+  flex: 1;
+  min-width: 0;
+}
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.comment-author {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+.comment-time {
+  font-size: 12px;
+  color: #909399;
+}
+.comment-content {
+  font-size: 14px;
+  color: #303133;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.comment-edit {
+  margin-top: 4px;
+}
+.comment-edit-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.comment-actions {
+  margin-top: 6px;
+  display: flex;
+  gap: 4px;
+}
+.comment-pagination {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
 }
 </style>

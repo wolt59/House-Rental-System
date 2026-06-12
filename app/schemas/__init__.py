@@ -12,3 +12,4 @@ from app.schemas.property_image import *
 from app.schemas.contract_application import *
 from app.schemas.contract_change_request import *
 from app.schemas.contract_termination_request import *
+from app.schemas.property_favorite import *

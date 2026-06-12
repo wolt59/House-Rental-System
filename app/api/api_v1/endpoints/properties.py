@@ -43,23 +43,33 @@ def list_properties(
     status: Optional[str] = None,
     review_status: Optional[str] = None,
     keyword: Optional[str] = None,
+    rent_min: Optional[float] = None,
+    rent_max: Optional[float] = None,
+    property_type: Optional[str] = None,
+    rental_type: Optional[str] = None,
+    decoration: Optional[str] = None,
+    bedrooms: Optional[int] = None,
+    sort_by: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user_optional),
 ):
     """
     获取房源列表
     - 管理员：可查看所有状态的房源
-    - 房东：可查看自己的所有房源
+    - 房东：可查看所有已审核通过的房源（含他人的），但不能看到他人未审核/未发布的
     - 普通用户（租客）：只能查看已审核通过且已发布的房源
     """
     # 管理员可以看到所有状态的房源
     if current_user and current_user.role == "admin":
         filter_review_status = review_status
         filter_status = status
-    # 房东查看自己的房源时，可以看到所有状态
+    # 房东可以查看所有已审核通过的房源，但需要过滤掉其他房东的非公开房源
     elif current_user and current_user.role == "landlord":
-        # 如果是房东查看自己的房源，在 my 接口中处理
-        filter_review_status = review_status
+        if review_status:
+            filter_review_status = review_status
+        else:
+            # 默认只展示已审核通过的房源（避免暴露他人草稿/待审核房源）
+            filter_review_status = PropertyReviewStatus.APPROVED
         filter_status = status
     else:
         # 普通用户（租客）只能看到已审核通过且已发布的房源
@@ -75,17 +85,25 @@ def list_properties(
     cache_key = CacheKey.property_list(
         skip=skip, limit=limit, region=region, floor_plan=floor_plan,
         status=filter_status, review_status=filter_review_status,
-        keyword=keyword, role=user_role,
+        keyword=keyword, rent_min=rent_min, rent_max=rent_max,
+        property_type=property_type, rental_type=rental_type,
+        decoration=decoration, bedrooms=bedrooms, sort_by=sort_by,
+        role=user_role,
     )
 
     def fetch_and_serialize():
         properties = crud_property.get_properties(
             db, skip=skip, limit=limit, region=region, floor_plan=floor_plan,
             review_status=filter_review_status, status=filter_status, keyword=keyword,
+            rent_min=rent_min, rent_max=rent_max, property_type=property_type,
+            rental_type=rental_type, decoration=decoration, bedrooms=bedrooms,
+            sort_by=sort_by,
         )
         total = crud_property.count_properties(
             db, region=region, floor_plan=floor_plan,
             review_status=filter_review_status, status=filter_status, keyword=keyword,
+            rent_min=rent_min, rent_max=rent_max, property_type=property_type,
+            rental_type=rental_type, decoration=decoration, bedrooms=bedrooms,
         )
         items = [Property.model_validate(p).model_dump(mode='json') for p in properties]
         return {"items": items, "total": total}
@@ -173,15 +191,26 @@ def read_property(property_id: int, db: Session = Depends(get_db), current_user=
     db_property = crud_property.get_property(db, property_id=property_id)
     if not db_property:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
-    if (
-        db_property.review_status != PropertyReviewStatus.APPROVED
-        and (not current_user or db_property.owner_id != current_user.id)
-        and (not current_user or current_user.role != "admin")
-    ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+    
+    # 检查查看权限：
+    # 1. 已审核通过的房源，如果是 published 状态：任何人都可以查看
+    # 2. 已审核通过的房源，如果是 unpublished/rented 状态：只有房东本人和管理员可以查看
+    # 3. 未审核通过的房源：只有房东本人和管理员可以查看
+    is_owner = current_user and db_property.owner_id == current_user.id
+    is_admin = current_user and current_user.role == "admin"
+    
+    if db_property.review_status == PropertyReviewStatus.APPROVED:
+        # 已审核通过：published 状态对所有人可见，unpublished/rented 仅对房东/管理员可见
+        if db_property.status != PropertyStatus.PUBLISHED and not is_owner and not is_admin:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+    else:
+        # 未审核通过：仅房东和管理员可见
+        if not is_owner and not is_admin:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
 
-    # 增量浏览量
-    _increment_view(db, db_property)
+    # 增量浏览量（仅对非房东、非管理员用户增加浏览量）
+    if not is_owner and not is_admin:
+        _increment_view(db, db_property)
 
     return db_property
 

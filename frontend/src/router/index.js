@@ -20,6 +20,7 @@ const routes = [
       { path: '', name: 'Home', component: () => import('../views/common/Home.vue') },
       { path: 'properties', name: 'PropertyList', component: () => import('../views/common/PropertyList.vue') },
       { path: 'properties/:id', name: 'PropertyDetail', component: () => import('../views/common/PropertyDetail.vue') },
+      { path: 'favorites', name: 'Favorites', component: () => import('../views/common/Favorites.vue') },
       { path: 'news', name: 'NewsList', component: () => import('../views/common/NewsList.vue') },
       { path: 'news/:id', name: 'NewsDetail', component: () => import('../views/common/NewsDetail.vue') },
       { path: 'search', name: 'SmartSearch', component: () => import('../views/common/SmartSearch.vue') },

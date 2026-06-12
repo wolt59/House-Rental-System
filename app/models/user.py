@@ -37,3 +37,5 @@ class User(Base):
     # 合约申请关系
     contract_applications_as_tenant = relationship("ContractApplication", foreign_keys="ContractApplication.tenant_id", back_populates="tenant")
     contract_applications_as_landlord = relationship("ContractApplication", foreign_keys="ContractApplication.landlord_id", back_populates="landlord")
+    favorites = relationship("PropertyFavorite", back_populates="user", cascade="all, delete-orphan")
+    comments = relationship("PropertyComment", back_populates="user", cascade="all, delete-orphan")

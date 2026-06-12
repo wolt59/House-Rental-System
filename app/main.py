@@ -48,6 +48,7 @@ CHAT_DOCUMENT_TYPES = {
 }
 CHAT_MAX_SIZE = 20 * 1024 * 1024  # 聊天文件上限 20MB
 LEGACY_MAX_SIZE = 10 * 1024 * 1024  # 兼容老接口 10MB
+IMAGE_MAX_SIZE = 5 * 1024 * 1024  # 图片文件上限 5MB
 
 
 @asynccontextmanager
@@ -148,14 +149,18 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
         if file.content_type.startswith("image/"):
             sub_dir = "images"
+            max_size = IMAGE_MAX_SIZE
+            max_size_msg = "5MB"
         else:
             sub_dir = "videos"
+            max_size = LEGACY_MAX_SIZE
+            max_size_msg = "10MB"
         ext = os.path.splitext(file.filename)[1] if file.filename else ""
         filename = f"{uuid.uuid4().hex}{ext}"
         file_path = os.path.join(UPLOAD_DIR, sub_dir, filename)
         content = await file.read()
-        if len(content) > LEGACY_MAX_SIZE:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 10MB)")
+        if len(content) > max_size:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"File too large (max {max_size_msg})")
         with open(file_path, "wb") as f:
             f.write(content)
         return {"url": f"/uploads/{sub_dir}/{filename}", "filename": filename}

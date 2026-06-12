@@ -491,6 +491,39 @@ CREATE TABLE IF NOT EXISTS contract_termination_requests (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='合同提前解约申请表';
 
 -- ============================================================
+-- 房源收藏表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS property_favorites (
+    id           INT          NOT NULL AUTO_INCREMENT,
+    property_id  INT          NOT NULL,
+    user_id      INT          NOT NULL,
+    created_at   DATETIME     NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_property_favorite_property_user (property_id, user_id),
+    KEY ix_property_favorite_user (user_id),
+    KEY ix_property_favorite_property (property_id),
+    CONSTRAINT fk_fav_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_fav_user     FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='房源收藏';
+
+-- ============================================================
+-- 房源评论表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS property_comments (
+    id           INT          NOT NULL AUTO_INCREMENT,
+    property_id  INT          NOT NULL,
+    user_id      INT          NOT NULL,
+    content      TEXT         NOT NULL,
+    created_at   DATETIME     NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY ix_property_comment_property (property_id),
+    KEY ix_property_comment_user (user_id),
+    CONSTRAINT fk_cmt_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_cmt_user     FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='房源评论';
+
+-- ============================================================
 -- 初始数据: 插入管理员账号 (密码: admin123)
 -- ============================================================
 INSERT INTO users (username, email, phone, full_name, hashed_password, role, is_active)

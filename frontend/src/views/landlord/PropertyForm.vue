@@ -207,8 +207,8 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="详细描述">
-          <el-input v-model="form.description" type="textarea" :rows="4" placeholder="详细描述房屋情况、周边设施、交通等" :disabled="isFieldDisabled('description')" />
+        <el-form-item label="详细描述" prop="description">
+          <el-input v-model="form.description" type="textarea" :rows="4" maxlength="2000" show-word-limit placeholder="详细描述房屋情况、周边设施、交通等（最多2000字）" :disabled="isFieldDisabled('description')" />
         </el-form-item>
       </div>
 
@@ -330,6 +330,9 @@ const rules = {
   ],
   deposit: [
     { type: 'number', min: 0, message: '押金不能为负数', trigger: 'blur' },
+  ],
+  description: [
+    { max: 2000, message: '描述不能超过 2000 字', trigger: 'blur' },
   ],
 }
 

@@ -213,6 +213,23 @@ async function manageImages(row) {
 }
 
 async function handleImageUpload(file) {
+  // 检查文件类型
+  const allowedTypes = ['image/jpeg', 'image/png']
+  if (!allowedTypes.includes(file.type)) {
+    ElMessage.error('仅支持 jpg/png 格式的图片')
+    return false
+  }
+  // 检查文件大小（最大 5MB）
+  const maxSize = 5 * 1024 * 1024
+  if (file.size > maxSize) {
+    ElMessage.error('图片不能超过 5MB')
+    return false
+  }
+  // 检查图片数量
+  if (images.value.length >= 9) {
+    ElMessage.error('最多上传 9 张图片')
+    return false
+  }
   try {
     const res = await uploadFile(file)
     await addPropertyImage(currentPropertyId.value, { image_url: res.url, image_type: 'photo', is_cover: images.value.length === 0 ? 1 : 0, sort_order: images.value.length })

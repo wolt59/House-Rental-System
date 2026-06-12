@@ -1,12 +1,17 @@
 from typing import List, Optional
 from datetime import datetime
-from sqlalchemy import case, func, or_
+from sqlalchemy import case, desc, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.property import Property
 from app.models.user import User
 from app.schemas.property import PropertyCreate
 from app.core.enums import PropertyReviewStatus, PropertyStatus
+
+# 最大图片数量限制
+MAX_PROPERTY_IMAGES = 9
+# 描述最大长度
+MAX_DESCRIPTION_LENGTH = 2000
 
 
 def get_property(db: Session, property_id: int) -> Optional[Property]:
@@ -23,6 +28,13 @@ def get_properties(
     review_status: str | None = None,
     status: str | None = None,
     keyword: str | None = None,
+    rent_min: float | None = None,
+    rent_max: float | None = None,
+    property_type: str | None = None,
+    rental_type: str | None = None,
+    decoration: str | None = None,
+    bedrooms: int | None = None,
+    sort_by: str | None = None,
 ):
     query = db.query(Property)
     if owner_id is not None:
@@ -40,8 +52,40 @@ def get_properties(
             or_(
                 Property.title.contains(keyword),
                 Property.address.contains(keyword),
+                Property.community_name.contains(keyword),
+                Property.description.contains(keyword),
+                Property.tags.contains(keyword),
+                Property.region.contains(keyword),
             )
         )
+    if rent_min is not None:
+        query = query.filter(Property.rent >= rent_min)
+    if rent_max is not None:
+        query = query.filter(Property.rent <= rent_max)
+    if property_type:
+        query = query.filter(Property.property_type == property_type)
+    if rental_type:
+        query = query.filter(Property.rental_type == rental_type)
+    if decoration:
+        query = query.filter(Property.decoration == decoration)
+    if bedrooms is not None:
+        query = query.filter(Property.bedrooms == bedrooms)
+    
+    # 排序
+    if sort_by == "price_asc":
+        query = query.order_by(Property.rent.asc())
+    elif sort_by == "price_desc":
+        query = query.order_by(Property.rent.desc())
+    elif sort_by == "newest":
+        query = query.order_by(desc(Property.published_at), desc(Property.created_at))
+    elif sort_by == "oldest":
+        query = query.order_by(Property.published_at.asc(), Property.created_at.asc())
+    elif sort_by == "views":
+        query = query.order_by(desc(Property.view_count))
+    else:
+        # 默认综合排序：按发布时间倒序
+        query = query.order_by(desc(Property.published_at), desc(Property.created_at))
+    
     return query.offset(skip).limit(limit).all()
 
 
@@ -53,6 +97,12 @@ def count_properties(
     review_status: str | None = None,
     status: str | None = None,
     keyword: str | None = None,
+    rent_min: float | None = None,
+    rent_max: float | None = None,
+    property_type: str | None = None,
+    rental_type: str | None = None,
+    decoration: str | None = None,
+    bedrooms: int | None = None,
 ) -> int:
     query = db.query(Property)
     if owner_id is not None:
@@ -70,8 +120,24 @@ def count_properties(
             or_(
                 Property.title.contains(keyword),
                 Property.address.contains(keyword),
+                Property.community_name.contains(keyword),
+                Property.description.contains(keyword),
+                Property.tags.contains(keyword),
+                Property.region.contains(keyword),
             )
         )
+    if rent_min is not None:
+        query = query.filter(Property.rent >= rent_min)
+    if rent_max is not None:
+        query = query.filter(Property.rent <= rent_max)
+    if property_type:
+        query = query.filter(Property.property_type == property_type)
+    if rental_type:
+        query = query.filter(Property.rental_type == rental_type)
+    if decoration:
+        query = query.filter(Property.decoration == decoration)
+    if bedrooms is not None:
+        query = query.filter(Property.bedrooms == bedrooms)
     return query.count()
 
 

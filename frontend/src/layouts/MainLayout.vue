@@ -87,6 +87,9 @@
               <el-menu-item index="/properties">
                 <el-icon><OfficeBuilding /></el-icon><span>房源列表</span>
               </el-menu-item>
+              <el-menu-item index="/favorites">
+                <el-icon><Star /></el-icon><span>我的收藏</span>
+              </el-menu-item>
               <el-menu-item index="/search">
                 <el-icon><Search /></el-icon><span>智能搜索</span>
               </el-menu-item>
@@ -170,6 +173,7 @@ import {
   HomeFilled, OfficeBuilding, Search, Document, ChatDotRound,
   User, SwitchButton, DataAnalysis, UserFilled, Notebook,
   Calendar, DocumentChecked, Money, Tools, WarningFilled, Bell,
+  Star,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()

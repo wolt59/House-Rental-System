@@ -132,7 +132,7 @@ class PropertyUpdate(BaseModel):
     other_fee_bearer: Optional[str] = None
     
     allow_pets: Optional[int] = None
-    description: Optional[str] = None
+    description: Optional[constr(max_length=2000)] = None
     
     # 第二类：选填信息
     build_year: Optional[int] = None
