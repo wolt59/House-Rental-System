@@ -93,6 +93,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '../../utils/request'
+import { getPropertyBrief, getProperty } from '../../api/property'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -143,14 +144,19 @@ const disabledEndDate = (date) => {
   return date.getTime() <= startDate.getTime()
 }
 
-// 加载房源信息
+// 加载房源信息：优先使用 brief 接口，已下架/已出租的房源仍可见。
 async function loadPropertyInfo() {
   if (!route.query.property_id) return
-  
+
   try {
     loading.value = true
-    const res = await request.get(`/api/v1/properties/${route.query.property_id}`)
-    propertyInfo.value = res
+    const pid = Number(route.query.property_id)
+    try {
+      propertyInfo.value = await getPropertyBrief(pid)
+    } catch {
+      const res = await getProperty(pid)
+      propertyInfo.value = res
+    }
   } catch (e) {
     ElMessage.error('加载房源信息失败')
   } finally {

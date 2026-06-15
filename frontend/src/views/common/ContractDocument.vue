@@ -315,7 +315,8 @@ function formatDateForPicker(val) {
 // 开始日期约束：不早于30天前，不晚于2年后
 function disabledStartDate(date) {
   const today = dayjs()
-  return date.isBefore(today.subtract(30, 'day')) || date.isAfter(today.add(2, 'year'))
+  const d = dayjs(date)
+  return d.isBefore(today.subtract(30, 'day')) || d.isAfter(today.add(2, 'year'))
 }
 
 // 结束日期约束：必须晚于开始日期，且不晚于开始日期后10年
@@ -323,7 +324,8 @@ function disabledEndDate(date) {
   const startVal = editableFields.value.start_date
   if (!startVal) return false
   const start = dayjs(startVal)
-  return date.isBefore(start.add(1, 'day')) || date.isAfter(start.add(10, 'year'))
+  const d = dayjs(date)
+  return d.isBefore(start.add(1, 'day')) || d.isAfter(start.add(10, 'year'))
 }
 
 // 可编辑字段的本地副本

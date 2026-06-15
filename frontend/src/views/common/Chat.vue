@@ -204,6 +204,7 @@
             <input
               ref="fileInputRef"
               type="file"
+              :accept="FILE_ACCEPT"
               class="hidden-input"
               @change="onFileSelected"
             />
@@ -257,6 +258,30 @@ const fileInputRef = ref(null)
 const pendingFile = ref(null) // { file, name, size, preview, message_type }
 const uploadProgress = ref(0)
 const lastPickerWasImage = ref(false)
+
+// 聊天上传白名单，与后端 app/main.py 的 CHAT_*_TYPES 保持一致
+const FILE_ACCEPT = [
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml',
+  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/x-m4a', 'audio/aac', 'audio/webm',
+  'video/mp4', 'video/webm', 'video/quicktime',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain', 'text/csv', 'text/markdown',
+  'application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed',
+  'application/json',
+  // 兜底用文件后缀（部分浏览器/系统对 MIME 过滤支持不一致，给后缀最稳）
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg',
+  '.mp3', '.wav', '.ogg', '.m4a', '.aac',
+  '.mp4', '.webm', '.mov',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.txt', '.csv', '.md',
+  '.zip', '.rar', '.7z', '.json',
+].join(',')
 
 const convPanelWidth = ref(320)
 const MIN_CONV_WIDTH = 240

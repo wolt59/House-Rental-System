@@ -25,6 +25,14 @@
       style="margin-bottom: 20px"
     />
 
+    <!-- 加载状态 -->
+    <div v-if="loading && !contract" class="loading-container">
+      <el-icon class="is-loading" :size="32">
+        <Loading />
+      </el-icon>
+      <p class="loading-text">加载合同中...</p>
+    </div>
+
     <!-- 合同内容区域（编辑模式 + 签署模式共用） -->
     <el-card v-loading="loading" class="contract-card" v-if="contract">
       <ContractDocument
@@ -74,10 +82,11 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, EditPen } from '@element-plus/icons-vue'
+import { Document, EditPen, Loading } from '@element-plus/icons-vue'
 import SignaturePad from '../../components/SignaturePad.vue'
 import ContractDocument from '../common/ContractDocument.vue'
 import { getContract, updateContract } from '../../api/contract'
+import { getPropertyBrief, getProperty } from '../../api/property'
 import request from '../../utils/request'
 
 const route = useRoute()
@@ -139,9 +148,11 @@ async function loadContract() {
     const promises = []
     if (contract.value.property_id) {
       promises.push(
-        request.get(`/api/v1/properties/${contract.value.property_id}`)
+        getProperty(contract.value.property_id)
           .then(r => { propertyInfo.value = r })
-          .catch(e => console.error('加载房源信息失败', e))
+          .catch(() => getPropertyBrief(contract.value.property_id)
+            .then(r => { propertyInfo.value = r })
+            .catch(e => console.error('加载房源信息失败', e)))
       )
     }
     if (contract.value.landlord_id) {
@@ -160,9 +171,11 @@ async function loadContract() {
     }
     await Promise.all(promises)
 
-    // 如果URL带了 mode=sign，直接进入签署模式
+    // 如果URL带了 mode=sign，待 DOM 渲染完成后进入签署模式
     if (shouldStartSigning.value) {
-      startSigning()
+      await nextTick()
+      // 不自动验证和签署，让用户手动点击"发起签署"按钮
+      // 避免因草稿合同字段为空导致验证弹窗遮挡页面
     }
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '加载合同失败')
@@ -500,5 +513,19 @@ onMounted(() => {
   color: #333;
   font-weight: 600;
   text-align: center;
+}
+
+/* 加载状态容器 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: #999;
+}
+.loading-text {
+  margin-top: 16px;
+  font-size: 14px;
 }
 </style>

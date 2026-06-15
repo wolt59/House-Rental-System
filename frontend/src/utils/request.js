@@ -34,31 +34,11 @@ request.interceptors.response.use(
         userStore.logout(router)
         ElMessage.error('登录已过期，请重新登录')
       }
-    } else {
-      const msg = extractErrorMessage(error) || '请求失败'
-      ElMessage.error(msg)
     }
+    // 不在此处统一弹错误提示——业务层已包含各自的 ElMessage.error 处理，
+    // 全局拦截重复弹窗在业务有 fallback 时会产生误导。
     return Promise.reject(error)
   }
 )
-
-function extractErrorMessage(error) {
-  const data = error.response?.data
-  if (!data) {
-    return error.message === 'Network Error' ? '网络连接失败，请检查服务器' : error.message
-  }
-  // FastAPI HTTPException: { detail: "string" }
-  if (typeof data.detail === 'string' && data.detail) return data.detail
-  // FastAPI RequestValidationError: { detail: [{ loc, msg, type }, ...] }
-  if (Array.isArray(data.detail) && data.detail.length) {
-    const first = data.detail[0]
-    let msg = first?.msg || ''
-    // 去掉 Pydantic 给 ValueError 自动加的 "Value error, " 前缀
-    msg = msg.replace(/^Value error,\s*/i, '')
-    const field = Array.isArray(first?.loc) ? first.loc.filter((p) => p !== 'body').join('.') : ''
-    return field ? `${field}: ${msg}` : msg
-  }
-  return null
-}
 
 export default request
