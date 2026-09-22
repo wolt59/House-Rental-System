@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { getProperty } from '../api/property'
+import { getProperty, getPropertyBrief } from '../api/property'
 import { useUserStore } from '../store/user'
 import request from '../utils/request'
 
@@ -38,12 +38,20 @@ export function useNameResolver() {
     if (!propertyId) return '-'
     const key = String(propertyId)
     if (propertyNames[key]) return propertyNames[key]
+    // 优先使用 brief 接口：该接口对存在合同/合约申请关系的用户可见，
+    // 即便房源已下架/已出租（status != published）也能拿到标题。
     try {
-      const prop = await getProperty(Number(key))
-      propertyNames[key] = prop.title || `房源#${key}`
+      const brief = await getPropertyBrief(Number(key))
+      propertyNames[key] = brief.title || `房源#${key}`
       return propertyNames[key]
     } catch {
-      propertyNames[key] = `房源#${key}`
+      // 兜底走标准详情接口（适用于匿名/未登录等场景）
+      try {
+        const prop = await getProperty(Number(key))
+        propertyNames[key] = prop.title || `房源#${key}`
+      } catch {
+        propertyNames[key] = `房源#${key}`
+      }
       return propertyNames[key]
     }
   }

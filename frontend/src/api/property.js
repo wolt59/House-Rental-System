@@ -16,6 +16,10 @@ export function getProperty(id) {
   return request.get(`/api/v1/properties/${id}`)
 }
 
+export function getPropertyBrief(id) {
+  return request.get(`/api/v1/properties/${id}/brief`)
+}
+
 export function createProperty(data) {
   return request.post('/api/v1/properties/', data)
 }

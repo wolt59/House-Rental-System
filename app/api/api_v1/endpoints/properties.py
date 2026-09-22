@@ -186,26 +186,123 @@ def create_property(property_in: PropertyCreate, request: Request, db: Session =
     return property_obj
 
 
-@router.get("/{property_id}", response_model=Property)
-def read_property(property_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user_optional)):
+@router.get("/{property_id}/brief")
+def get_property_brief(
+    property_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """获取房源简要信息（供预约/合同/合约申请等关联列表展示房源名使用）。
+
+    与 read_property 不同，本接口放宽了可见性：除了房东本人和管理员之外，
+    与该房源存在以下任一关系的用户也可访问：
+    - 预约看房记录（bookings.tenant_id）
+    - 合同（contracts.landlord_id / contracts.tenant_id）
+    - 合约申请（contract_applications.landlord_id / contract_applications.tenant_id）
+    用于在预约/合同/申请列表中正确显示房源名称。
+    """
+    from app.models.booking import Booking
+    from app.models.contract import Contract
+    from app.models.contract_application import ContractApplication
+
     db_property = crud_property.get_property(db, property_id=property_id)
     if not db_property:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
-    
-    # 检查查看权限：
-    # 1. 已审核通过的房源，如果是 published 状态：任何人都可以查看
-    # 2. 已审核通过的房源，如果是 unpublished/rented 状态：只有房东本人和管理员可以查看
-    # 3. 未审核通过的房源：只有房东本人和管理员可以查看
-    is_owner = current_user and db_property.owner_id == current_user.id
-    is_admin = current_user and current_user.role == "admin"
-    
+
+    is_owner = db_property.owner_id == current_user.id
+    is_admin = current_user.role == "admin"
+
+    if not is_owner and not is_admin:
+        has_booking = (
+            db.query(Booking.id)
+            .filter(Booking.property_id == property_id)
+            .filter(Booking.tenant_id == current_user.id)
+            .first()
+            is not None
+        )
+        has_contract = (
+            db.query(Contract.id)
+            .filter(Contract.property_id == property_id)
+            .filter((Contract.landlord_id == current_user.id) | (Contract.tenant_id == current_user.id))
+            .first()
+            is not None
+        )
+        has_application = (
+            db.query(ContractApplication.id)
+            .filter(ContractApplication.property_id == property_id)
+            .filter(
+                (ContractApplication.landlord_id == current_user.id)
+                | (ContractApplication.tenant_id == current_user.id)
+            )
+            .first()
+            is not None
+        )
+        if not (has_booking or has_contract or has_application):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+
+    return {
+        "id": db_property.id,
+        "title": db_property.title,
+        "address": db_property.address,
+        "status": db_property.status,
+        "review_status": db_property.review_status,
+    }
+
+
+@router.get("/{property_id}", response_model=Property)
+def read_property(property_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user_optional)):
+    from app.models.booking import Booking
+    from app.models.contract import Contract
+    from app.models.contract_application import ContractApplication
+
+    db_property = crud_property.get_property(db, property_id=property_id)
+    if not db_property:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+
+    if not current_user:
+        # 未登录：只能查看已审核通过且已发布的房源
+        if db_property.review_status != PropertyReviewStatus.APPROVED or db_property.status != PropertyStatus.PUBLISHED:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
+        _increment_view(db, db_property)
+        return db_property
+
+    is_owner = db_property.owner_id == current_user.id
+    is_admin = current_user.role == "admin"
+
+    # 检查是否可以通过关联关系访问（预约/合同/合约申请）
+    has_relationship = False
+    if not is_owner and not is_admin:
+        has_relationship = (
+            db.query(Booking.id)
+            .filter(Booking.property_id == property_id, Booking.tenant_id == current_user.id)
+            .first()
+            is not None
+        ) or (
+            db.query(Contract.id)
+            .filter(
+                Contract.property_id == property_id,
+                (Contract.landlord_id == current_user.id) | (Contract.tenant_id == current_user.id),
+            )
+            .first()
+            is not None
+        ) or (
+            db.query(ContractApplication.id)
+            .filter(
+                ContractApplication.property_id == property_id,
+                (ContractApplication.landlord_id == current_user.id)
+                | (ContractApplication.tenant_id == current_user.id),
+            )
+            .first()
+            is not None
+        )
+
     if db_property.review_status == PropertyReviewStatus.APPROVED:
-        # 已审核通过：published 状态对所有人可见，unpublished/rented 仅对房东/管理员可见
-        if db_property.status != PropertyStatus.PUBLISHED and not is_owner and not is_admin:
+        # 已审核通过：published 对所有人可见；unpublished/rented 仅对房东/管理员/关联用户可见
+        if db_property.status != PropertyStatus.PUBLISHED and not is_owner and not is_admin and not has_relationship:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
     else:
-        # 未审核通过：仅房东和管理员可见
-        if not is_owner and not is_admin:
+        # 未审核通过：仅房东/管理员/关联用户可见
+        if not is_owner and not is_admin and not has_relationship:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
 
     # 增量浏览量（仅对非房东、非管理员用户增加浏览量）

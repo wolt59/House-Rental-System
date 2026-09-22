@@ -144,7 +144,7 @@ async function loadData() {
     }
     const res = await getBookings(params)
     bookings.value = res.items || []
-    await resolveItems(bookings.value, ['tenant_id'])
+    await resolveItems(bookings.value, ['tenant_id', 'property_id'])
     total.value = res.total || 0
   } catch (e) {
     ElMessage.error('加载预约列表失败')

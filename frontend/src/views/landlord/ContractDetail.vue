@@ -69,6 +69,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElLoading } from 'element-plus'
 import ContractDocument from '../common/ContractDocument.vue'
 import { getContract } from '../../api/contract'
+import { getPropertyBrief, getProperty } from '../../api/property'
 import { usePolling } from '../../composables/usePolling'
 import request from '../../utils/request'
 
@@ -105,12 +106,16 @@ async function loadContract() {
     // 检查权限（房东只能查看自己的合同）
     // 后端API已经做了权限检查，这里只需要处理加载失败的情况
 
-    // 获取房源信息
+    // 获取房源信息：优先使用完整接口，回退到 brief 接口
     if (contract.value.property_id) {
       try {
-        propertyInfo.value = await request.get(`/api/v1/properties/${contract.value.property_id}`)
+        propertyInfo.value = await getProperty(contract.value.property_id)
       } catch (e) {
-        console.error('加载房源信息失败', e)
+        try {
+          propertyInfo.value = await getPropertyBrief(contract.value.property_id)
+        } catch (e2) {
+          console.error('加载房源信息失败', e2)
+        }
       }
     }
 

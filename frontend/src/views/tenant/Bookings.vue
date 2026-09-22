@@ -24,7 +24,7 @@
     <el-table :data="bookings" stripe v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column label="房源" min-width="200" show-overflow-tooltip>
-        <template #default="{ row }">房源 #{{ row.property_id }}</template>
+        <template #default="{ row }">{{ propertyNames[row.property_id] || '加载中...' }}</template>
       </el-table-column>
       <el-table-column label="预约时间" min-width="180">
         <template #default="{ row }">{{ formatDate(row.appointment_time) }}</template>
@@ -78,8 +78,10 @@ import { autoCreateContract } from '../../api/contract'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '../../utils/request'
+import { useNameResolver } from '../../composables/useNameResolver'
 
 const router = useRouter()
+const { resolveItems, propertyNames } = useNameResolver()
 const bookings = ref([])
 const loading = ref(false)
 const total = ref(0)
@@ -170,38 +172,41 @@ function onTabChange() {
 async function loadData() {
   loading.value = true
   try {
-    const params = { 
-      skip: (currentPage.value - 1) * pageSize.value, 
+    const params = {
+      skip: (currentPage.value - 1) * pageSize.value,
       limit: pageSize.value,
       sort_by: sortBy.value,
       sort_order: sortOrder.value
     }
-    
+
     // 未来日程：后端筛选已同意状态，前端再按时间过滤
     if (activeTab.value === 'upcoming') {
       const res = await getBookings({ status: 'approved', skip: 0, limit: 100, sort_by: sortBy.value, sort_order: sortOrder.value })
       const allBookings = (res && res.items) || []
       const now = new Date()
       bookings.value = allBookings.filter(b => new Date(b.appointment_time) > now)
+      await resolveItems(bookings.value, ['property_id'])
       total.value = bookings.value.length
       return
     }
-    
+
     // 已结束：显示已完成的预约
     if (activeTab.value === 'ended') {
       const res = await getBookings({ ...params, status: 'completed' })
       bookings.value = (res && res.items) || []
+      await resolveItems(bookings.value, ['property_id'])
       total.value = bookings.value.length
       await loadApplicationStatus()
       return
     }
-    
+
     // 其他标签页按原逻辑处理
     if (activeTab.value !== 'all') {
       params.status = activeTab.value
     }
     const res = await getBookings(params)
     bookings.value = res.items || []
+    await resolveItems(bookings.value, ['property_id'])
     total.value = res.total || 0
     await loadApplicationStatus()
   } catch (e) {

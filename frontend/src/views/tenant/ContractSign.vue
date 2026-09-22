@@ -46,6 +46,7 @@ import { ElMessage } from 'element-plus'
 import SignaturePad from '../../components/SignaturePad.vue'
 import ContractDocument from '../common/ContractDocument.vue'
 import { getContract } from '../../api/contract'
+import { getPropertyBrief, getProperty } from '../../api/property'
 import request from '../../utils/request'
 
 const route = useRoute()
@@ -97,12 +98,16 @@ async function loadContract() {
       return
     }
 
-    // 获取房源信息
+    // 获取房源信息：优先使用完整接口，回退到 brief 接口
     if (contract.value.property_id) {
       try {
-        propertyInfo.value = await request.get(`/api/v1/properties/${contract.value.property_id}`)
+        propertyInfo.value = await getProperty(contract.value.property_id)
       } catch (e) {
-        console.error('加载房源信息失败', e)
+        try {
+          propertyInfo.value = await getPropertyBrief(contract.value.property_id)
+        } catch (e2) {
+          console.error('加载房源信息失败', e2)
+        }
       }
     }
 
